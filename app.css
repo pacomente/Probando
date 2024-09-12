@@ -1,0 +1,28 @@
+/* src/App.css */
+.App {
+    text-align: center;
+  }
+  
+  .editor-container {
+    width: 80%;
+    margin: 0 auto;
+  }
+  
+  .controls {
+    display: flex;
+    justify-content: space-around;
+    margin: 20px 0;
+  }
+  
+  .preview {
+    border: 1px solid #ccc;
+    padding: 20px;
+    min-height: 200px;
+    font-size: 24px;
+    margin-bottom: 20px;
+  }
+  
+  button {
+    padding: 10px 20px;
+    font-size: 16px;
+  }
