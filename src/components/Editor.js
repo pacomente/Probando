@@ -1,8 +1,11 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { fabric } from 'fabric';
 
 const Editor = () => {
     const canvasRef = useRef(null);
+    const [selectedObject, setSelectedObject] = useState(null);
+    const [textColor, setTextColor] = useState('#000000');
+    const [fontFamily, setFontFamily] = useState('Arial');
 
     useEffect(() => {
         const canvas = new fabric.Canvas(canvasRef.current, {
@@ -16,11 +19,26 @@ const Editor = () => {
             left: 100,
             top: 100,
             fontSize: 30,
+            fill: '#000',
+            fontFamily: 'Arial',
         });
 
         canvas.add(text);
 
-        // Agregar más lógica de edición aquí, como imágenes y formas
+        // Asignar objeto seleccionado cuando se hace clic
+        canvas.on('selection:created', (e) => {
+            setSelectedObject(e.target);
+        });
+
+        canvas.on('selection:updated', (e) => {
+            setSelectedObject(e.target);
+        });
+
+        canvas.on('selection:cleared', () => {
+            setSelectedObject(null);
+        });
+
+        canvasRef.current.fabric = canvas;
     }, []);
 
     const addText = () => {
@@ -31,6 +49,7 @@ const Editor = () => {
             width: 200,
             fontSize: 20,
             fill: '#000',
+            fontFamily: 'Arial',
         });
         canvas.add(text);
     };
@@ -41,6 +60,22 @@ const Editor = () => {
             img.scale(0.5);
             canvas.add(img);
         });
+    };
+
+    const changeTextColor = (e) => {
+        setTextColor(e.target.value);
+        if (selectedObject && selectedObject.type === 'textbox') {
+            selectedObject.set({ fill: e.target.value });
+            canvasRef.current.fabric.renderAll();
+        }
+    };
+
+    const changeFontFamily = (e) => {
+        setFontFamily(e.target.value);
+        if (selectedObject && selectedObject.type === 'textbox') {
+            selectedObject.set({ fontFamily: e.target.value });
+            canvasRef.current.fabric.renderAll();
+        }
     };
 
     const downloadCanvas = () => {
@@ -63,9 +98,55 @@ const Editor = () => {
                 <button onClick={() => addImage('https://via.placeholder.com/150')}>Añadir Imagen</button>
                 <button onClick={downloadCanvas}>Descargar Diseño</button>
             </div>
+
+            {/* Controles para cambiar el color y la fuente */}
+            {selectedObject && selectedObject.type === 'textbox' && (
+                <div className="text-controls">
+                    <label>
+                        Color del texto:
+                        <input type="color" value={textColor} onChange={changeTextColor} />
+                    </label>
+                    <label>
+                        Fuente:
+                        <select value={fontFamily} onChange={changeFontFamily}>
+                            <option value="Arial">Arial</option>
+                            <option value="Courier New">Courier New</option>
+                            <option value="Times New Roman">Times New Roman</option>
+                            <option value="Verdana">Verdana</option>
+                        </select>
+                    </label>
+                </div>
+            )}
+
             <canvas ref={canvasRef} id="canvas" />
         </div>
     );
 };
 
+const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    
+    reader.onload = function (f) {
+        const data = f.target.result;
+        addImage(data); // Usamos la función addImage para cargar la imagen al lienzo
+    };
+
+    if (file) {
+        reader.readAsDataURL(file);
+    }
+};
+
+return (
+    <div className="editor-container">
+        {/* Otros botones y controles */}
+
+        <input type="file" accept="image/*" onChange={handleFileUpload} />
+        
+        <canvas ref={canvasRef} id="canvas" />
+    </div>
+);
+
+
 export default Editor;
+
