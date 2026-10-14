@@ -176,13 +176,38 @@ async function init() {
   }
 
   for (const m of history) {
-    const el = addMessage(m.role, m.content);
+    const el = addMessage(m.role, m.display || m.content);
     if (m.role === 'assistant') finishAssistant(el, m.content);
   }
 }
 
-// Pide una respuesta al modelo con el historial actual y la muestra en streaming
-async function ask() {
+// Envía mensajes al modelo y devuelve la respuesta completa; si se pasa `el`, la muestra en streaming
+async function streamChat(messages, el) {
+  const res = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: modelSelect.value, messages }),
+    signal: controller.signal,
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Error ${res.status}`);
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let reply = '';
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    reply += decoder.decode(value, { stream: true });
+    if (el) {
+      setContent(el, reply);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+  }
+  return reply;
+}
+
+// Crea la burbuja de respuesta, ejecuta `work(el)` y guarda lo que devuelva en el historial
+async function respond(work) {
   const el = addMessage('assistant', '');
   el.classList.add('thinking');
   controller = new AbortController();
@@ -190,23 +215,7 @@ async function ask() {
 
   let reply = '';
   try {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: modelSelect.value, messages: history }),
-      signal: controller.signal,
-    });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Error ${res.status}`);
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      reply += decoder.decode(value, { stream: true });
-      setContent(el, reply);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-    }
+    reply = await work(el);
   } catch (err) {
     if (err.name !== 'AbortError') {
       el.classList.add('error');
@@ -219,6 +228,7 @@ async function ask() {
   }
 
   if (reply) {
+    setContent(el, reply);
     history.push({ role: 'assistant', content: reply });
     save();
     finishAssistant(el, reply);
@@ -227,11 +237,89 @@ async function ask() {
   }
 }
 
+// Pide una respuesta al modelo con el historial actual
+function ask() {
+  return respond((el) => streamChat(history, el));
+}
+
 function send(text) {
   history.push({ role: 'user', content: text });
   addMessage('user', text);
   save();
   ask();
+}
+
+// Documentos: el texto se resume de una vez si es corto, o por partes si es largo
+const DIRECT_LIMIT = 14000; // caracteres que caben de una vez en el contexto del modelo
+const CHUNK_SIZE = 10000;
+const MAX_CHARS = 80000; // más allá se recorta para que no tarde demasiado
+
+function summaryPrompt(name, source, hints, instruction) {
+  return `Te paso ${source}. Léelo con atención y responde en español con EXACTAMENTE este formato:
+
+## 📄 Resumen de «${name}»
+Un resumen claro de 1 a 3 párrafos: de qué trata, ideas principales y conclusiones.
+
+### Puntos clave
+- Entre 3 y 6 viñetas con los datos, nombres, cifras o ideas más importantes.
+
+### 🔑 Palabras clave
+Entre 8 y 12 palabras o expresiones clave del documento, cada una entre comillas invertidas (\`así\`) y separadas por " · ".
+
+Usa solo información del documento, sin inventar nada.${hints.length ? ` Pistas: las palabras más repetidas son ${hints.join(', ')} (úsalas solo si son relevantes).` : ''}${instruction ? `\n\nAdemás, el usuario pide: ${instruction}` : ''}`;
+}
+
+async function summarizeDocument(file, instruction) {
+  if (controller) return;
+  const sizeKb = Math.max(1, Math.round(file.size / 1024));
+  const display = `📄 ${file.name} (${sizeKb} KB)${instruction ? `\n${instruction}` : ''}`;
+  addMessage('user', display);
+
+  let text;
+  try {
+    text = (await extractText(file)).replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+    if (!text) throw new Error('El documento está vacío.');
+  } catch (err) {
+    addMessage('error', `No se pudo leer «${file.name}»: ${err.message}`);
+    return;
+  }
+
+  const words = text.split(/\s+/).length;
+  const truncated = text.length > MAX_CHARS;
+  if (truncated) text = text.slice(0, MAX_CHARS);
+  const hints = topWords(text);
+
+  await respond(async (el) => {
+    let prompt;
+    if (text.length <= DIRECT_LIMIT) {
+      prompt = summaryPrompt(file.name, `el documento «${file.name}»`, hints, instruction) + `\n\n--- DOCUMENTO ---\n${text}\n--- FIN ---`;
+    } else {
+      // Documento largo: primero un resumen de cada parte, luego el resumen final a partir de ellos
+      const chunks = splitText(text, CHUNK_SIZE);
+      const partials = [];
+      for (let i = 0; i < chunks.length; i++) {
+        setContent(el, `_Leyendo «${file.name}» (${words.toLocaleString('es')} palabras)… parte ${i + 1} de ${chunks.length}_`);
+        const partial = await streamChat([
+          {
+            role: 'user',
+            content: `Esta es la parte ${i + 1} de ${chunks.length} del documento «${file.name}». Resúmela en español en 5 a 8 viñetas, conservando nombres, cifras, fechas e ideas importantes. Responde solo con las viñetas.\n\n${chunks[i]}`,
+          },
+        ]);
+        partials.push(`Parte ${i + 1}:\n${partial.trim()}`);
+      }
+      setContent(el, `_Escribiendo el resumen final…_`);
+      prompt =
+        summaryPrompt(file.name, `los resúmenes por partes del documento «${file.name}»`, hints, instruction) +
+        `\n\n--- RESÚMENES POR PARTES ---\n${partials.join('\n\n')}\n--- FIN ---`;
+    }
+
+    // Se guarda en el historial para poder hacer preguntas después sobre el documento
+    history.push({ role: 'user', content: prompt, display });
+    save();
+    let reply = await streamChat(history, el);
+    if (truncated && reply) reply += `\n\n> ⚠️ El documento era muy largo: solo se han leído las primeras ${MAX_CHARS.toLocaleString('es')} letras.`;
+    return reply;
+  });
 }
 
 function regenerate() {
@@ -284,6 +372,46 @@ document.querySelectorAll('.suggestions button').forEach((b) =>
     if (!controller) send(b.textContent);
   }),
 );
+
+// Adjuntar documentos: botón 📎 o arrastrar y soltar
+const fileInput = $('#file');
+fileInput.accept = DOC_EXTENSIONS.join(',');
+$('#attach').addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => {
+  const [file] = fileInput.files;
+  fileInput.value = '';
+  if (file) attach(file);
+});
+
+function attach(file) {
+  if (controller) return;
+  const instruction = input.value.trim();
+  input.value = '';
+  input.style.height = '';
+  summarizeDocument(file, instruction);
+}
+
+let dragDepth = 0;
+window.addEventListener('dragenter', (e) => {
+  if (!e.dataTransfer?.types.includes('Files')) return;
+  e.preventDefault();
+  dragDepth++;
+  document.body.classList.add('dragging');
+});
+window.addEventListener('dragleave', () => {
+  if (--dragDepth <= 0) {
+    dragDepth = 0;
+    document.body.classList.remove('dragging');
+  }
+});
+window.addEventListener('dragover', (e) => e.preventDefault());
+window.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dragDepth = 0;
+  document.body.classList.remove('dragging');
+  const [file] = e.dataTransfer?.files || [];
+  if (file) attach(file);
+});
 
 $('#preview-close').addEventListener('click', () => previewDialog.close());
 $('#preview-download').addEventListener('click', () => download(previewHtml, 'pagina.html'));

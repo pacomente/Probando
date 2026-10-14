@@ -40,6 +40,11 @@ Notas:
 - Conversar y responder preguntas con formato (títulos, listas, tablas, código).
 - **Crear páginas web**: pídele una web, una landing o un juego y pulsa **▶ Ver página** para verla
   funcionando dentro del chat, o **Descargar** para guardarla como `.html`.
+- **Resumir documentos**: pulsa 📎 (o arrastra un archivo al chat) y te devuelve un resumen,
+  los puntos clave y las **palabras clave**. Lee PDF (con texto, no escaneados), Word `.docx`,
+  `.txt`, `.md`, `.csv`, `.json` y `.html`. Si escribes algo antes de adjuntarlo, lo usa como
+  instrucción (por ejemplo: «céntrate en las fechas»). Después puedes hacerle preguntas sobre él.
+  Los documentos largos se leen por partes; el texto se extrae en tu navegador y no sale de tu máquina.
 - Copiar respuestas o código y **regenerar** la última respuesta si no te convence.
 
 ## ¿Cómo hacerla más inteligente?
@@ -73,7 +78,8 @@ mi-ia/
     ├── index.html   # interfaz de chat
     ├── style.css
     ├── app.js       # lógica del chat (historial guardado en el navegador)
-    └── vendor/      # marked (Markdown) y DOMPurify, incluidos para funcionar sin internet
+    ├── documents.js # lectura de PDF, Word y texto, y palabras más frecuentes
+    └── vendor/      # marked (Markdown), DOMPurify y pdf.js, incluidos para funcionar sin internet
 ```
 
 ## API
