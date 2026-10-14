@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Se ejecuta una sola vez al crear el Codespace
 set -euo pipefail
+source "$(dirname "$0")/model.sh"
 
 if ! command -v ollama > /dev/null; then
   echo "▶ Instalando Ollama…"
@@ -10,7 +11,6 @@ fi
 
 bash "$(dirname "$0")/ollama-up.sh"
 
-MODEL="${MODEL:-llama3.2:1b}"
 echo "▶ Descargando el modelo $MODEL (puede tardar unos minutos)…"
 ollama pull "$MODEL"
 echo "✔ Listo"

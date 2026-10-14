@@ -19,13 +19,35 @@ if (existsSync(envPath)) {
 
 const PORT = Number(process.env.PORT) || 3000;
 const OLLAMA_URL = (process.env.OLLAMA_URL || 'http://localhost:11434').replace(/\/$/, '');
-const DEFAULT_MODEL = process.env.MODEL || 'llama3.2';
+const DEFAULT_MODEL = process.env.MODEL || 'qwen2.5:3b';
 const AI_NAME = process.env.AI_NAME || 'Nova';
 
-// Personalidad de la IA: edita este texto para cambiar cómo se comporta
-const SYSTEM_PROMPT = `Eres ${AI_NAME}, un asistente de inteligencia artificial propio que funciona de forma local.
-Respondes siempre en el idioma del usuario (por defecto en español), de forma clara, amable y concisa.
-Si no sabes algo, lo dices con honestidad en lugar de inventarlo.`;
+// Personalidad e instrucciones de la IA: edita este texto para cambiar cómo se comporta
+function systemPrompt() {
+  const hoy = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  return `Eres ${AI_NAME}, un asistente de inteligencia artificial experto, útil y preciso. Hoy es ${hoy}.
+
+Cómo respondes:
+- Siempre en el idioma del usuario (por defecto en español), con un tono cercano y claro.
+- Piensa paso a paso antes de responder preguntas difíciles, de lógica o de matemáticas, y muestra el razonamiento cuando ayude.
+- Organiza las respuestas largas con títulos, listas y tablas en Markdown. Las respuestas cortas, directas.
+- Si no estás seguro de un dato, dilo con honestidad en vez de inventarlo. Tus conocimientos tienen una fecha de corte.
+
+Cuando te pidan crear una página web, una landing, un juego o cualquier cosa visual en HTML:
+- Entrega UN solo archivo HTML completo en un bloque \`\`\`html, con el CSS dentro de <style> y el JavaScript dentro de <script>.
+- Hazla bonita y moderna: buena tipografía, colores armoniosos, espaciado generoso y diseño adaptable a móvil.
+- Usa contenido de ejemplo realista (nunca "Lorem ipsum") y no dejes partes sin terminar.
+- Antes del código, explica en una o dos frases qué has hecho; después, sugiere mejoras posibles.
+- Si te piden cambios sobre una página anterior, devuelve otra vez el archivo HTML completo ya modificado.
+
+Cuando escribas código de otro tipo, usa bloques de código con el lenguaje indicado y explica lo importante.`;
+}
+
+// Parámetros del modelo: más contexto para que recuerde la conversación y quepan páginas web largas
+const MODEL_OPTIONS = {
+  num_ctx: Number(process.env.NUM_CTX) || 8192,
+  temperature: 0.6,
+};
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const MIME = {
@@ -78,7 +100,7 @@ async function handleChat(req, res) {
   const messages = Array.isArray(payload.messages)
     ? payload.messages
         .filter((m) => ['user', 'assistant'].includes(m?.role) && typeof m.content === 'string')
-        .slice(-30) // limita el historial que se envía al modelo
+        .slice(-40) // limita el historial que se envía al modelo
     : [];
   if (messages.length === 0) return sendJson(res, 400, { error: 'No hay mensajes' });
 
@@ -92,7 +114,8 @@ async function handleChat(req, res) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: payload.model || DEFAULT_MODEL,
-        messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
+        messages: [{ role: 'system', content: systemPrompt() }, ...messages],
+        options: MODEL_OPTIONS,
         stream: true,
       }),
       signal: controller.signal,
