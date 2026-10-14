@@ -1,0 +1,21 @@
+{
+  "name": "Mi IA (Node.js + Ollama)",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+  "hostRequirements": {
+    "cpus": 2,
+    "memory": "8gb"
+  },
+  // Modelo pequeño: los Codespaces no tienen GPU
+  "remoteEnv": {
+    "MODEL": "llama3.2:1b"
+  },
+  // Al crear el Codespace: instala Ollama y descarga el modelo (solo la primera vez)
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  // Cada vez que abres el Codespace: arranca Ollama y la IA
+  "postAttachCommand": "bash .devcontainer/start.sh",
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": { "label": "Mi IA", "onAutoForward": "openBrowser" },
+    "11434": { "label": "Ollama", "onAutoForward": "ignore" }
+  }
+}
