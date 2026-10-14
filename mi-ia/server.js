@@ -54,6 +54,7 @@ const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
 };
@@ -63,7 +64,7 @@ function sendJson(res, status, data) {
   res.end(JSON.stringify(data));
 }
 
-async function readBody(req, limit = 1_000_000) {
+async function readBody(req, limit = 5_000_000) {
   let body = '';
   for await (const chunk of req) {
     body += chunk;
@@ -100,6 +101,7 @@ async function handleChat(req, res) {
   const messages = Array.isArray(payload.messages)
     ? payload.messages
         .filter((m) => ['user', 'assistant'].includes(m?.role) && typeof m.content === 'string')
+        .map(({ role, content }) => ({ role, content }))
         .slice(-40) // limita el historial que se envía al modelo
     : [];
   if (messages.length === 0) return sendJson(res, 400, { error: 'No hay mensajes' });

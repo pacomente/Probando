@@ -31,10 +31,13 @@
         <button type="button">Explícame cómo funciona la inteligencia artificial, paso a paso</button>
         <button type="button">Dame ideas de negocio que pueda empezar con poco dinero</button>
       </div>
+      <p class="hint">📎 Adjunta o arrastra un documento (PDF, Word, TXT…) y te hago un resumen con sus palabras clave.</p>
     </div>
   </main>
 
   <form id="composer">
+    <button id="attach" type="button" title="Adjuntar documento (PDF, Word, TXT…) para resumirlo">📎</button>
+    <input id="file" type="file" hidden>
     <textarea id="input" rows="1" placeholder="Escribe tu mensaje… (Enter para enviar, Shift+Enter para nueva línea)" required></textarea>
     <button id="send" type="submit">Enviar</button>
   </form>
@@ -51,6 +54,9 @@
     <iframe id="preview-frame" sandbox="allow-scripts allow-forms allow-modals" title="Vista previa"></iframe>
   </dialog>
 
+  <div class="drop-overlay">Suelta el documento para resumirlo</div>
+
+  <script src="documents.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
