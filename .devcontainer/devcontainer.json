@@ -5,10 +5,6 @@
     "cpus": 2,
     "memory": "8gb"
   },
-  // Modelo pequeño: los Codespaces no tienen GPU
-  "remoteEnv": {
-    "MODEL": "llama3.2:1b"
-  },
   // Al crear el Codespace: instala Ollama y descarga el modelo (solo la primera vez)
   "postCreateCommand": "bash .devcontainer/setup.sh",
   // Cada vez que abres el Codespace: arranca Ollama y la IA

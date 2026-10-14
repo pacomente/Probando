@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mi IA</title>
   <link rel="stylesheet" href="style.css">
+  <!-- Markdown (marked) y limpieza de HTML (DOMPurify), incluidos en el proyecto para funcionar sin internet -->
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/purify.min.js"></script>
 </head>
 <body>
   <header>
@@ -21,8 +24,13 @@
   <main id="messages">
     <div class="empty" id="empty">
       <p class="big">✦</p>
-      <p>Hola, soy <strong class="name">tu IA</strong>. Funciono en local, en tu propio ordenador.</p>
-      <p class="hint">Escribe un mensaje para empezar.</p>
+      <p>Hola, soy <strong class="name">tu IA</strong>. Funciono en local, sin enviar tus datos a nadie.</p>
+      <div class="suggestions">
+        <button type="button">Crea una página web para una cafetería, con menú, horarios y contacto</button>
+        <button type="button">Hazme un juego de adivinar el número en HTML</button>
+        <button type="button">Explícame cómo funciona la inteligencia artificial, paso a paso</button>
+        <button type="button">Dame ideas de negocio que pueda empezar con poco dinero</button>
+      </div>
     </div>
   </main>
 
@@ -30,6 +38,18 @@
     <textarea id="input" rows="1" placeholder="Escribe tu mensaje… (Enter para enviar, Shift+Enter para nueva línea)" required></textarea>
     <button id="send" type="submit">Enviar</button>
   </form>
+
+  <!-- Vista previa de páginas web creadas por la IA -->
+  <dialog id="preview">
+    <div class="preview-bar">
+      <strong>Vista previa</strong>
+      <div>
+        <button type="button" id="preview-download">Descargar</button>
+        <button type="button" id="preview-close">Cerrar</button>
+      </div>
+    </div>
+    <iframe id="preview-frame" sandbox="allow-scripts allow-forms allow-modals" title="Vista previa"></iframe>
+  </dialog>
 
   <script src="app.js"></script>
 </body>
