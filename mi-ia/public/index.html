@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mi IA</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="logo">✦</span>
+      <h1 id="ai-name">Mi IA</h1>
+    </div>
+    <div class="controls">
+      <select id="model" title="Modelo"></select>
+      <button id="new-chat" type="button" title="Nueva conversación">Nueva</button>
+    </div>
+  </header>
+
+  <main id="messages">
+    <div class="empty" id="empty">
+      <p class="big">✦</p>
+      <p>Hola, soy <strong class="name">tu IA</strong>. Funciono en local, en tu propio ordenador.</p>
+      <p class="hint">Escribe un mensaje para empezar.</p>
+    </div>
+  </main>
+
+  <form id="composer">
+    <textarea id="input" rows="1" placeholder="Escribe tu mensaje… (Enter para enviar, Shift+Enter para nueva línea)" required></textarea>
+    <button id="send" type="submit">Enviar</button>
+  </form>
+
+  <script src="app.js"></script>
+</body>
+</html>
