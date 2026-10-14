@@ -22,6 +22,19 @@ npm start
 
 Abre <http://localhost:3000> y empieza a chatear.
 
+## Probarla en GitHub Codespaces (sin instalar nada)
+
+1. En la página del repositorio pulsa **Code → Codespaces → Create codespace on main**.
+2. Espera a que termine la preparación: la primera vez instala Ollama y descarga el modelo
+   `llama3.2:1b` (unos minutos).
+3. La IA arranca sola y se abre en una pestaña del navegador. Si no se abre, ve a la
+   pestaña **Ports** y abre la dirección del puerto 3000.
+
+Notas:
+- Los Codespaces no tienen GPU: por eso usa el modelo pequeño y las respuestas tardan unos segundos.
+- El plan gratuito tiene un límite de horas al mes: detén el Codespace cuando termines.
+- Para cambiar de modelo, edita `MODEL` en `.devcontainer/devcontainer.json` y recrea el Codespace.
+
 ## Personalizar tu IA
 
 - **Nombre, modelo y puerto**: copia `.env.example` a `.env` y edítalo.
