@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block contenido %}
+<div class="tarjeta" style="max-width:360px;margin:60px auto">
+  <h2 style="margin-top:0">Panel de licencias</h2>
+  <form method="post">
+    <label for="clave">Contraseña</label>
+    <input id="clave" type="password" name="clave" autofocus required>
+    <p><button>Entrar</button></p>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block contenido %}
+<div class="numeros" style="margin-bottom:16px">
+  <div><span class="chico">Licencias</span><b>{{ totales.total or 0 }}</b></div>
+  <div><span class="chico">Activas</span><b>{{ totales.activas or 0 }}</b></div>
+  <div><span class="chico">Suspendidas</span><b>{{ totales.suspendidas or 0 }}</b></div>
+  <div><span class="chico">Instaladas en una PC</span><b>{{ totales.instaladas or 0 }}</b></div>
+</div>
+<div class="tarjeta">
+  <form class="fila" method="get" style="margin-bottom:12px">
+    <input name="q" value="{{ buscar }}" placeholder="Buscar cliente, comercio, clave o teléfono" style="flex:1;min-width:200px">
+    <button>Buscar</button>
+  </form>
+  <div class="tabla">
+  <table>
+    <tr><th>Cliente</th><th>Clave</th><th>Estado</th><th>Última conexión</th><th>Notas</th></tr>
+    {% for l in licencias %}
+    {% set dias = hace_dias(l.ultima_conexion) %}
+    <tr>
+      <td><a href="/licencia/{{ l.id }}"><b>{{ l.cliente }}</b></a><br><span class="chico">{{ l.comercio }} {{ l.telefono }}</span></td>
+      <td class="clave">{{ l.clave }}</td>
+      <td><span class="estado {{ l.estado }}">{{ l.estado|upper }}</span>{% if l.permanente %}<br><span class="chico">permanente</span>{% endif %}</td>
+      <td>{% if l.ultima_conexion %}{{ l.ultima_conexion[:16] }}<br><span class="chico {% if dias > 7 %}alerta{% endif %}">hace {{ dias }} días</span>{% else %}<span class="chico">sin instalar</span>{% endif %}</td>
+      <td class="chico">{{ l.precio }} {{ l.notas[:60] }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5">No hay licencias. <a href="/nueva">Creá la primera</a>.</td></tr>
+    {% endfor %}
+  </table>
+  </div>
+</div>
+{% endblock %}

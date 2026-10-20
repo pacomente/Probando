@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block contenido %}
+<div class="tarjeta">
+  <h3 style="margin-top:0">Clave pública del panel</h3>
+  <p>Esta clave va dentro del programa (archivo <code>pos/clave_publica.py</code>). Sirve para que el programa
+  compruebe que las licencias las firmó este panel. No es secreta.</p>
+  <pre>CLAVE_PUBLICA = """{{ pem }}"""</pre>
+  <p class="alerta">La clave PRIVADA (panel/datos/clave_privada.pem) no se comparte nunca y hay que guardarla
+  con copia: si se pierde, los programas ya vendidos dejan de poder renovar su licencia.</p>
+</div>
+{% endblock %}

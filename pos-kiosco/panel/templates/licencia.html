@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block contenido %}
+{% if not nueva %}
+<div class="tarjeta">
+  <div class="fila" style="justify-content:space-between">
+    <div>
+      <div class="chico">Clave para darle al cliente</div>
+      <div class="clave" style="font-size:22px">{{ licencia.clave }}</div>
+    </div>
+    <span class="estado {{ licencia.estado }}" style="font-size:16px">{{ licencia.estado|upper }}</span>
+  </div>
+  <p class="chico">
+    PC: {{ licencia.equipo or "todavía no se activó" }} · Activada: {{ licencia.activada or "-" }} ·
+    Última conexión: {{ licencia.ultima_conexion or "-" }} · Versión: {{ licencia.version or "-" }}
+  </p>
+  <form method="post" class="fila">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% if licencia.estado == "activa" %}
+      <button class="peligro" name="accion" value="suspender" onclick="return confirm('¿Suspender esta licencia? El programa del cliente se bloquea la próxima vez que se conecte.')">Suspender licencia</button>
+    {% else %}
+      <button name="accion" value="activar">Reactivar licencia</button>
+    {% endif %}
+    {% if licencia.equipo %}
+      <button class="secundario" name="accion" value="liberar" onclick="return confirm('¿Liberar la PC? El cliente podrá activar la licencia en otra computadora.')">Liberar PC (cambió de computadora)</button>
+    {% endif %}
+  </form>
+  <p class="chico">
+    {% if licencia.permanente %}
+      Licencia permanente: el programa no necesita conectarse. Si la suspendés, el bloqueo solo llega si el programa se conecta.
+    {% else %}
+      El programa se conecta cada pocas horas. Si se suspende, se bloquea en la próxima conexión o, como máximo, a los {{ dias_sin_internet }} días sin internet.
+    {% endif %}
+  </p>
+</div>
+{% endif %}
+<div class="tarjeta">
+  <h3 style="margin-top:0">{{ "Nueva licencia" if nueva else "Datos del cliente" }}</h3>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="accion" value="guardar">
+    <div class="grilla">
+      <div><label>Cliente *</label><input name="cliente" value="{{ licencia.cliente or '' }}" required></div>
+      <div><label>Comercio</label><input name="comercio" value="{{ licencia.comercio or '' }}"></div>
+      <div><label>Teléfono / WhatsApp</label><input name="telefono" value="{{ licencia.telefono or '' }}"></div>
+      <div><label>Email</label><input name="email" value="{{ licencia.email or '' }}"></div>
+      <div><label>Precio / forma de pago</label><input name="precio" value="{{ licencia.precio or '' }}" placeholder="Ej: $150.000 en 3 cuotas"></div>
+    </div>
+    <label>Mensaje que ve el cliente si está suspendida</label>
+    <input name="mensaje" value="{{ licencia.mensaje or '' }}" placeholder="Ej: Tenés una cuota pendiente. Escribinos al 11-...">
+    <label>Notas internas</label>
+    <textarea name="notas" rows="3">{{ licencia.notas or '' }}</textarea>
+    <label style="font-weight:400"><input type="checkbox" name="permanente" value="1" style="width:auto" {% if licencia.permanente %}checked{% endif %}>
+      Permanente: ya pagó todo y no necesita internet (ojo: después no la vas a poder bloquear a distancia)</label>
+    <p><button>{{ "Crear licencia" if nueva else "Guardar" }}</button></p>
+  </form>
+</div>
+{% if historial %}
+<div class="tarjeta">
+  <h3 style="margin-top:0">Historial</h3>
+  <table>{% for h in historial %}<tr><td class="chico" style="width:160px">{{ h.fecha }}</td><td>{{ h.detalle }}</td></tr>{% endfor %}</table>
+</div>
+{% endif %}
+{% endblock %}
