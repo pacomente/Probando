@@ -28,10 +28,11 @@ const SERIAL = (process.env.SERIAL || '').trim(); // COM3:4800,COM4:38400
 const CENTRAL_URL = (process.env.TRAPPI_CENTRAL_URL || '').trim();
 const TOKEN = (process.env.TRAPPI_TOKEN || '').trim();
 const CARPETA_DATOS = process.env.CARPETA_DATOS || path.join(__dirname, 'datos');
-// Zona que se escucha en aisstream.io: AIS_ZONA=latSur,lonOeste,latNorte,lonEste (por defecto, la ría de Bahía Blanca)
+// Zona que se escucha en aisstream.io: AIS_ZONA=latSur,lonOeste,latNorte,lonEste
+// (por defecto, todo el Mar Argentino, el Río de la Plata y el Paraná hasta Santa Fe)
 const ZONA = (() => {
   const v = (process.env.AIS_ZONA || '').split(',').map(Number);
-  return v.length === 4 && v.every(Number.isFinite) ? [[v[0], v[1]], [v[2], v[3]]] : [[-39.6, -62.6], [-38.6, -60.9]];
+  return v.length === 4 && v.every(Number.isFinite) ? [[v[0], v[1]], [v[2], v[3]]] : [[-56.5, -70.5], [-31.3, -52]];
 })();
 
 const registro = new RegistroBuques();

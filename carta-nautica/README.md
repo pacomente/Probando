@@ -64,6 +64,7 @@ Para cerrarla, cerrá la ventana negra (o `Ctrl+C` en la terminal).
 | 🌪 **Avisos de tormenta** | Temporal, tormenta eléctrica, caída de presión, mar gruesa y niebla en las próximas 24 h. |
 | 🌊 **Mareas y viento** | Curva de marea, viento en la zona y pronóstico de 48 h. |
 | 📘 **Guía OMI** | SMSSM, señales de socorro, reglas del RIPA, señales con niebla, balizamiento IALA B y Beaufort. |
+| 🇦🇷 **Todo el país** | Costa argentina completa incluida (Río de la Plata, costa bonaerense, Patagonia, Tierra del Fuego e islas) con 41 puertos y ciudades costeras. Las distancias se dan desde el puerto más cercano y el pronóstico sigue la zona que se mira o la posición del barco. |
 | 📴 **Sin internet** | Funcionan la carta, la costa, el GPS, el AIS del barco, el MOB, el MAYDAY y el último pronóstico. Las posiciones se guardan y se envían al volver la conexión. |
 
 ### En la oficina (Trappi Central)
@@ -152,7 +153,7 @@ barco y día, y `alertas.jsonl`. Hay que hacer **copias de seguridad** de esa ca
 | `enlace-central.js` | Envío de posiciones y alertas con cola en disco para los cortes de conexión. |
 | `ais-nmea.js` | Lectura de sentencias NMEA: AIS (!AIVDM/!AIVDO) y GPS ($GPRMC). |
 | `comun.js` | Código compartido por los dos servidores. |
-| `public/` | La carta (web): `app.js`, `emergencia.js`, `navegacion.js` (cálculos y RIPA), `sw.js` (uso sin internet), `login.html` (oficina). |
+| `public/` | La carta (web): `app.js`, `emergencia.js`, `navegacion.js` (cálculos y RIPA), `sw.js` (uso sin internet), `login.html` (oficina), `puertos.js` (puertos y ciudades), `costa.js` (costa argentina). |
 | `Trappi-a-bordo.bat` | Arranque en Windows. |
 | `Ver-demo.bat` | Abre la demostración en Windows. |
 | `public/demo.html` | Portada de la demostración; `simulacion-flota.js` y `tiempo-ejemplo.js` son sus datos simulados. |

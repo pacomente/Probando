@@ -5,13 +5,11 @@ import { cpa, destino, distNM, rumbo, situacionRIPA } from './navegacion.js';
 import { RegistroBuques } from './registro.js';
 import { CANAL_PRINCIPAL, crearSimulacion } from './simulacion.js';
 import { COSTA } from './costa.js';
+import { PUERTOS } from './puertos.js';
 import { alarma, crearGeneradorSocorro, crearMOB, emergencia, silenciarAlarma } from './emergencia.js';
 import { $, esc, fmtPos, grados, guardar, hace, leer, leerJSON, num } from './util.js';
 
 const ZONA_HORARIA = 'America/Argentina/Buenos_Aires';
-const ING_WHITE = { lat: -38.7935, lon: -62.27 };
-const PUNTO_PRONOSTICO = { lat: -38.95, lon: -62.0 };
-const PUNTO_MAR = { lat: -39.1, lon: -61.6 };
 const MINUTOS_VECTOR = 6;
 const TCPA_MAX_MIN = 20;
 const ESTIMA_MAX_MS = 3 * 60000; // más allá, no se adivina: se muestra la última posición recibida
@@ -35,16 +33,17 @@ if (MODO_DEMO) {
 const PRACTICA = new URLSearchParams(location.search).has('practica') || MODO_DEMO === 'practica';
 const DEMO_OFICINA = MODO_DEMO === 'oficina';
 
-// Posiciones aproximadas, solo como referencia en la carta
-const PUERTOS = [
-  { nombre: 'Puerto Ingeniero White', lat: -38.7935, lon: -62.27, icono: '⚓', info: 'Terminales de granos, combustibles y contenedores' },
-  { nombre: 'Prefectura Naval · Ing. White', lat: -38.7905, lon: -62.2655, icono: '🛡', info: 'Prefectura Bahía Blanca. Emergencias: 106 · VHF canal 16' },
-  { nombre: 'Puerto Galván', lat: -38.784, lon: -62.302, icono: '⚓', info: 'Terminales de inflamables y cargas generales' },
-  { nombre: 'Puerto Cuatreros', lat: -38.755, lon: -62.38, icono: '⛵', info: 'Gral. Daniel Cerri' },
-  { nombre: 'Base Naval Puerto Belgrano', lat: -38.893, lon: -62.105, icono: '⚓', info: 'Armada Argentina' },
-  { nombre: 'Puerto Rosales', lat: -38.923, lon: -62.066, icono: '⚓', info: 'Punta Alta' },
-  { nombre: 'Faro Recalada', lat: -38.99, lon: -61.27, icono: '🗼', info: 'Monte Hermoso. Recalada a Bahía Blanca' },
-];
+// Punto de referencia para distancias: el puerto o la ciudad costera más cercana
+function referencia(p) {
+  let mejor = PUERTOS[0];
+  let d = Infinity;
+  for (const q of PUERTOS) {
+    const dq = distNM(q, p);
+    if (dq < d) { d = dq; mejor = q; }
+  }
+  return { nombre: mejor.nombre, punto: mejor, d, r: rumbo(mejor, p) };
+}
+const desdeReferencia = (p) => { const r = referencia(p); return `${num(r.d)} MN al ${grados(r.r)} de ${r.nombre}`; };
 
 const TIPOS = {
   emergencia: { color: '#ff0000', nombre: 'Emergencia (SART / MOB / EPIRB / SOS)' },
@@ -85,7 +84,9 @@ const CODIGOS_TIEMPO = {
 };
 
 // ---------- Mapa ----------
-const map = L.map('mapa', { zoomControl: true, worldCopyJump: true }).setView([-38.97, -61.95], 10);
+// Vista inicial: todo el Mar Argentino. En la práctica, la ría de Bahía Blanca, donde está el tráfico simulado
+const map = L.map('mapa', { zoomControl: true, worldCopyJump: true, minZoom: 3 })
+  .setView(PRACTICA ? [-38.97, -61.95] : [-41.5, -61], PRACTICA ? 10 : 5);
 
 // La costa incluida en la página se dibuja debajo de las teselas: si no hay internet, se sigue viendo
 map.createPane('costa');
@@ -93,6 +94,7 @@ map.getPane('costa').style.zIndex = 150;
 L.geoJSON(COSTA, {
   pane: 'costa',
   interactive: false,
+  renderer: L.canvas({ pane: 'costa' }), // en canvas, la costa de todo el país se mueve fluida también en el celular
   attribution: '© OpenStreetMap', // mismo texto que la carta: el mapa lo muestra una sola vez
   style: { color: '#6b5a3e', weight: 1, fillColor: '#efe6cf', fillOpacity: 1 },
 }).addTo(map);
@@ -117,14 +119,17 @@ L.polyline(CANAL_PRINCIPAL, { color: '#d633ff', weight: 2, dashArray: '8 6', opa
   .bindTooltip('Canal Principal: trazado APROXIMADO. Guiate por las boyas reales (capa OpenSeaMap) y la carta del SHN.', { sticky: true })
   .addTo(capaCanal);
 for (const p of PUERTOS) {
-  L.marker([p.lat, p.lon], { icon: L.divIcon({ className: 'puerto-icono', html: p.icono, iconSize: [20, 20] }) })
-    .bindPopup(`<b>${esc(p.nombre)}</b><br>${esc(p.info)}<br><small>${fmtPos(p)} (posición aproximada)</small>`)
+  const ciudad = p.tipo === 'ciudad';
+  L.marker([p.lat, p.lon], { icon: L.divIcon({ className: `puerto-icono ${ciudad ? 'es-ciudad' : 'es-puerto'}`, html: ciudad ? '<i></i>' : '⚓', iconSize: ciudad ? [8, 8] : [20, 20] }) })
+    .bindTooltip(esc(p.nombre), { permanent: true, direction: p.etiquetaIzquierda ? 'left' : 'right', offset: [(ciudad ? 4 : 8) * (p.etiquetaIzquierda ? -1 : 1), 0],
+      className: `etiqueta-lugar ${ciudad ? 'lugar-ciudad' : 'lugar-puerto'} ${p.principal ? 'lugar-principal' : 'lugar-secundario'}` })
+    .bindPopup(`<b>${esc(p.nombre)}</b><br>${esc(p.provincia)}${p.tipo === 'base' ? ' · Armada Argentina' : ''}<br>Prefectura: 106 · VHF canal 16<br><small>${fmtPos(p)} (posición aproximada)</small>`)
     .addTo(capaPuertos);
 }
 
 L.control.layers(capasBase, {
   'Balizas, boyas y faros (OpenSeaMap)': marcasNauticas,
-  'Viento en la ría': capaViento,
+  'Viento en la zona': capaViento,
   'Puertos (aprox.)': capaPuertos,
   'Canal Principal (aprox.)': capaCanal,
   'Riesgo de abordaje': capaRiesgo,
@@ -132,13 +137,19 @@ L.control.layers(capasBase, {
 L.control.scale({ imperial: false }).addTo(map);
 
 map.on('baselayerchange', (e) => map.getContainer().classList.toggle('mapa-oscuro', !e.name.startsWith('Carta')));
-const actualizarEtiquetas = () => map.getContainer().classList.toggle('sin-etiquetas', map.getZoom() < 12);
+const actualizarEtiquetas = () => {
+  const z = map.getZoom();
+  const c = map.getContainer().classList;
+  c.toggle('sin-etiquetas', z < 12); // nombres de buques
+  c.toggle('lugares-ocultos', z < 6); // nombres de puertos
+  c.toggle('secundarios-ocultos', z < 9); // puertos chicos y ciudades, solo de cerca
+};
 map.on('zoomend', actualizarEtiquetas);
 actualizarEtiquetas();
 
 function mostrarCoordenadas(latlng, prefijo = '') {
   const p = { lat: latlng.lat, lon: latlng.lng };
-  $('#coordenadas').textContent = `${prefijo}${fmtPos(p)} · ${num(distNM(ING_WHITE, p))} MN al ${grados(rumbo(ING_WHITE, p))} de Ing. White`;
+  $('#coordenadas').textContent = `${prefijo}${fmtPos(p)} · ${desdeReferencia(p)}`;
 }
 map.on('mousemove', (e) => mostrarCoordenadas(e.latlng));
 map.on('move', () => { if (matchMedia('(hover: none)').matches) mostrarCoordenadas(map.getCenter(), 'Centro: '); });
@@ -375,13 +386,16 @@ function explicarRIPA(r) {
 }
 
 // ---------- Lista y ficha ----------
+// La lista se ordena por cercanía a mi posición o, si no hay GPS, al centro de la carta
+const origenLista = () => propio || { lat: map.getCenter().lat, lon: map.getCenter().lng };
+
 function renderLista() {
   const texto = $('#buscar').value.trim().toLowerCase();
   const tipo = $('#filtro-tipo').value;
   const prioridad = (b) => (categoria(b) === 'emergencia' ? 2 : enMovimiento(b) ? 1 : 0);
   const lista = [...buques.values()]
     .filter(({ datos: b }) => (!tipo || categoria(b) === tipo) && (!texto || `${b.nombre} ${b.mmsi}`.toLowerCase().includes(texto)))
-    .map((e) => ({ e, b: e.datos, d: distNM(ING_WHITE, e.datos) }))
+    .map((e) => ({ e, b: e.datos, d: distNM(origenLista(), e.datos) }))
     .sort((x, y) => prioridad(y.b) - prioridad(x.b) || x.d - y.d);
   $('#cuenta-buques').textContent = buques.size;
   if (config.rol === 'central') renderResumenFlota();
@@ -401,7 +415,7 @@ function renderLista() {
       <div><div class="nombre">${esc(b.nombre || `MMSI ${b.mmsi}`)}</div>
       <div class="detalle">${esc(descripcionTipo(b))}${b.destino ? ` → ${esc(b.destino)}` : ''}</div></div>
       <div class="der">${enMovimiento(b) ? `${num(b.sog)} kn · ${grados(b.cog)}` : esc(ESTADOS_NAV[b.estado] || 'Detenido')}<br>
-      <span class="detalle">${senalVieja(e) ? `⚠ sin señal ${hace(edad(e))}` : `${num(d)} MN de Ing. White`}</span></div>
+      <span class="detalle">${senalVieja(e) ? `⚠ sin señal ${hace(edad(e))}` : `${esc(referencia(b).nombre)}, ${num(referencia(b).d)} MN`}</span></div>
     </li>`).join('');
 }
 $('#lista-buques').addEventListener('click', (ev) => {
@@ -479,7 +493,7 @@ function renderFicha() {
     ['Precisión GPS', b.precision === 1 ? 'Alta (menos de 10 m)' : b.precision === 0 ? 'Normal (más de 10 m)' : null],
     ['Destino', b.destino], ['ETA', b.eta],
     ['Eslora × manga', b.eslora ? `${b.eslora} × ${b.manga ?? '—'} m` : null], ['Calado', b.calado ? `${num(b.calado)} m` : null],
-    ['Ing. White', `${num(distNM(ING_WHITE, p))} MN al ${grados(rumbo(ING_WHITE, p))}`],
+    ['Referencia', desdeReferencia(p)],
     ['Desde mí', propio ? `${num(distNM(propio, p))} MN al ${grados(rumbo(propio, p))}` : null],
     ['Mensaje AIS', b.mensajeSeguridad],
     ['Datos descartados', b.saltosDescartados ? `${b.saltosDescartados} posiciones imposibles` : null],
@@ -637,7 +651,24 @@ async function obtener(url) {
   }
 }
 
+// El pronóstico se pide para la posición del barco o, si no hay GPS, para el centro de la carta
+let puntoTiempo = null;
+let proximaCarga = null;
+const lugarTiempo = () => (propio ? { lat: propio.lat, lon: propio.lon } : { lat: map.getCenter().lat, lon: map.getCenter().lng });
+// Si la zona cambia más de 30 millas, se vuelve a pedir el pronóstico para la zona nueva
+map.on('moveend', () => {
+  if (puntoTiempo && !tiempoEjemplo && distNM(puntoTiempo, lugarTiempo()) > 30) {
+    clearTimeout(proximaCarga);
+    proximaCarga = setTimeout(cargarTiempo, 1500);
+  }
+});
+
 async function cargarTiempo() {
+  clearTimeout(proximaCarga);
+  const lugar = lugarTiempo();
+  puntoTiempo = lugar;
+  const PUNTO_PRONOSTICO = lugar;
+  const PUNTO_MAR = lugar;
   const comunes = { timezone: ZONA_HORARIA, past_days: '1', forecast_days: '4' };
   const urlPronostico = 'https://api.open-meteo.com/v1/forecast?' + new URLSearchParams({
     latitude: PUNTO_PRONOSTICO.lat, longitude: PUNTO_PRONOSTICO.lon, wind_speed_unit: 'kn', ...comunes,
@@ -647,8 +678,12 @@ async function cargarTiempo() {
     latitude: PUNTO_MAR.lat, longitude: PUNTO_MAR.lon, ...comunes,
     hourly: 'wave_height,wave_direction,wave_period,sea_level_height_msl',
   });
+  // Flechas de viento: una grilla de 3 × 3 sobre la zona que se está mirando
+  const b = map.getBounds().pad(-0.2);
   const malla = [];
-  for (const lat of [-38.82, -39.0, -39.2]) for (const lon of [-62.2, -61.85, -61.5]) malla.push({ lat, lon });
+  for (const f of [0, 0.5, 1]) for (const g of [0, 0.5, 1]) {
+    malla.push({ lat: +(b.getSouth() + (b.getNorth() - b.getSouth()) * f).toFixed(3), lon: +(b.getWest() + (b.getEast() - b.getWest()) * g).toFixed(3) });
+  }
   const urlMalla = 'https://api.open-meteo.com/v1/forecast?' + new URLSearchParams({
     latitude: malla.map((p) => p.lat).join(','), longitude: malla.map((p) => p.lon).join(','),
     current: 'wind_speed_10m,wind_direction_10m,wind_gusts_10m', wind_speed_unit: 'kn',
@@ -697,7 +732,9 @@ async function cargarTiempo() {
 
   alertasTiempo = f ? analizarTiempo(f, m) : [];
   renderAlertas();
-  setTimeout(cargarTiempo, !tiempoSinConexion && datos.mar ? 15 * 60000 : 2 * 60000);
+  $('#tiempo-lugar').textContent = `Pronóstico para ${fmtPos(lugar)} · ${desdeReferencia(lugar)}${propio ? ' (posición del barco)' : ' (centro de la carta)'}`;
+  $('#marea-lugar').textContent = $('#tiempo-lugar').textContent;
+  proximaCarga = setTimeout(cargarTiempo, !tiempoSinConexion && datos.mar ? 15 * 60000 : 2 * 60000);
 }
 
 function renderTiempo(f, m) {
@@ -810,7 +847,7 @@ function analizarTiempo(f, m) {
     if (olaMax.h >= 2.5) {
       alertas.push({ nivel: olaMax.h >= 4 ? 'peligro' : 'aviso', icono: '🌊', clave: `olas-${m.ms[olaMax.k]}`,
         titulo: olaMax.h >= 4 ? 'MAR MUY GRUESA' : 'Mar gruesa',
-        texto: `Olas de ${num(olaMax.h)} m en la boca de la ría (${diaHora(m.ms[olaMax.k])}).` });
+        texto: `Olas de ${num(olaMax.h)} m en la zona (${diaHora(m.ms[olaMax.k])}).` });
     }
   }
   if (tiempoEjemplo) for (const a of alertas) a.texto += ' (EJEMPLO de demostración, no es el tiempo real.)';
@@ -902,7 +939,7 @@ function alertasEmergencia() {
         nivel: em.prueba ? 'info' : 'peligro', icono: em.prueba ? '🧪' : '🆘', mmsi: b.mmsi, activa: !em.prueba,
         clave: `emergencia-${b.mmsi}-${em.prueba}`,
         titulo: em.prueba ? `${em.tipo}: prueba del equipo` : em.tipo.toUpperCase(),
-        texto: `${b.nombre || `MMSI ${b.mmsi}`} en ${fmtPos(p)} (${num(distNM(ING_WHITE, p))} MN al ${grados(rumbo(ING_WHITE, p))} de Ing. White).${desdeMi}` +
+        texto: `${b.nombre || `MMSI ${b.mmsi}`} en ${fmtPos(p)} (${desdeReferencia(p)}).${desdeMi}` +
           (b.sos ? ` Alerta enviada ${hace(Date.now() - b.sos.hora)}${b.sos.lat != null ? `, posición del evento ${fmtPos(b.sos)}` : ''}.${b.sos.texto ? ` «${b.sos.texto.split('\n').slice(0, 3).join(' / ')}…»` : ''}` : '') +
           (em.prueba ? ' Es una prueba, no una emergencia.' : ' Avisá a Prefectura: 106 o VHF canal 16.') + (senalVieja(e) ? ` Última señal ${hace(edad(e))}.` : ''),
       });
@@ -1128,7 +1165,7 @@ const mob = crearMOB({ map, obtenerPropio: () => propio, obtenerPosicionRapida, 
 socorro = crearGeneradorSocorro({
   obtenerPropio: () => propio,
   obtenerMOB: () => mob.actual(),
-  referencia: { punto: ING_WHITE, nombre: 'PUERTO INGENIERO WHITE' },
+  referencia: (p) => { const r = referencia(p); return { punto: r.punto, nombre: r.nombre.toUpperCase() }; },
 });
 $('#btn-mob').addEventListener('click', () => mob.marcar());
 $('#mob-fin').addEventListener('click', () => mob.terminar());

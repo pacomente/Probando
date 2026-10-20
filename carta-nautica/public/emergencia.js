@@ -201,8 +201,9 @@ export function crearGeneradorSocorro({ obtenerPropio, obtenerMOB, referencia })
     const lugar = $('#sos-naturaleza').value === 'mob' && mob ? mob : propio;
     let posicion = 'POSICIÓN: ⚠ [activá 📍 Mi posición para completarla con el GPS]';
     if (lugar) {
-      const d = distNM(referencia.punto, lugar);
-      posicion = `POSICIÓN ${fmtPos(lugar).replace(/\s+/g, ' ')}\n${num(d)} MILLAS AL ${grados(rumbo(referencia.punto, lugar))} DE ${referencia.nombre}`;
+      const ref = referencia(lugar);
+      const d = distNM(ref.punto, lugar);
+      posicion = `POSICIÓN ${fmtPos(lugar).replace(/\s+/g, ' ')}\n${num(d)} MILLAS AL ${grados(rumbo(ref.punto, lugar))} DE ${ref.nombre}`;
     }
     const x3 = (t) => `${t}, ${t}, ${t}`;
     const lineas = [];
