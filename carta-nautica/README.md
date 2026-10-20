@@ -33,6 +33,22 @@ emergencias a su alrededor, aun sin internet. La oficina en tierra ve toda su fl
   la central, a cualquier distancia.
 - Todas las conexiones salen del barco hacia la central (HTTPS). Esto funciona con Starlink, que no acepta conexiones entrantes.
 
+## Ver la demostración en tu PC
+
+Muestra las dos partes del sistema (a bordo y oficina) con barcos simulados. No hace falta configurar nada.
+
+1. Instalá **Node.js 22 LTS** desde <https://nodejs.org> (siguiente, siguiente, finalizar).
+2. Descargá el proyecto: en GitHub, elegí la rama del proyecto, tocá **Code → Download ZIP** y descomprimilo.
+3. Abrí la carpeta `carta-nautica` y:
+   - **Windows:** doble clic en **`Ver-demo.bat`**. Se abre solo el navegador.
+   - **Mac o Linux:** abrí una terminal en esa carpeta y ejecutá `npm run demo`.
+4. Si el navegador no se abre solo, entrá a **<http://localhost:3001/demo.html>**.
+
+Desde la portada se elige **Trappi a bordo** o **Trappi Central** (oficina). En la oficina, el botón **Simular SOS** hace
+que un barco envíe un hombre al agua. Con internet, la demo en tu PC muestra además el mapa detallado y las boyas.
+
+Para cerrarla, cerrá la ventana negra (o `Ctrl+C` en la terminal).
+
 ## Funciones
 
 ### En el barco (Trappi a bordo)
@@ -138,6 +154,8 @@ barco y día, y `alertas.jsonl`. Hay que hacer **copias de seguridad** de esa ca
 | `comun.js` | Código compartido por los dos servidores. |
 | `public/` | La carta (web): `app.js`, `emergencia.js`, `navegacion.js` (cálculos y RIPA), `sw.js` (uso sin internet), `login.html` (oficina). |
 | `Trappi-a-bordo.bat` | Arranque en Windows. |
+| `Ver-demo.bat` | Abre la demostración en Windows. |
+| `public/demo.html` | Portada de la demostración; `simulacion-flota.js` y `tiempo-ejemplo.js` son sus datos simulados. |
 
 Datos de terceros: costa © colaboradores de OpenStreetMap (ODbL), señalización © OpenSeaMap, mapas © OpenStreetMap,
 Esri y CARTO, pronóstico Open-Meteo, librería de mapas Leaflet (BSD-2).

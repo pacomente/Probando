@@ -16,8 +16,24 @@ const MINUTOS_VECTOR = 6;
 const TCPA_MAX_MIN = 20;
 const ESTIMA_MAX_MS = 3 * 60000; // más allá, no se adivina: se muestra la última posición recibida
 const SENAL_VIEJA_MS = 6 * 60000; // sin señal hace más de esto: posición poco fiable
-// Modo práctica: con ?practica en la dirección o en una página de demostración (<meta name="trappi-modo" content="practica">)
-const PRACTICA = new URLSearchParams(location.search).has('practica') || Boolean(document.querySelector('meta[name="trappi-modo"][content="practica"]'));
+// Páginas de demostración: <meta name="trappi-modo" content="practica"> (a bordo) u "oficina" (Trappi Central simulada)
+// También con ?demo=abordo u ?demo=oficina en la dirección (para abrirlas desde la portada demo.html)
+const MODO_DEMO = document.querySelector('meta[name="trappi-modo"]')?.content
+  || { abordo: 'practica', oficina: 'oficina' }[new URLSearchParams(location.search).get('demo')] || null;
+if (MODO_DEMO) {
+  const volver = document.createElement('a');
+  volver.className = 'demo-volver';
+  volver.href = document.querySelector('meta[name="trappi-demo-inicio"]')?.content || 'demo.html';
+  volver.textContent = '← Demo';
+  volver.title = 'Volver a la portada de la demostración';
+  // Si se llegó desde la portada, se vuelve a ella tal cual (sirve también donde la dirección no se conoce)
+  volver.addEventListener('click', (e) => {
+    if (document.referrer && history.length > 1) { e.preventDefault(); history.back(); }
+  });
+  document.querySelector('.acciones').prepend(volver);
+}
+const PRACTICA = new URLSearchParams(location.search).has('practica') || MODO_DEMO === 'practica';
+const DEMO_OFICINA = MODO_DEMO === 'oficina';
 
 // Posiciones aproximadas, solo como referencia en la carta
 const PUERTOS = [
@@ -368,6 +384,7 @@ function renderLista() {
     .map((e) => ({ e, b: e.datos, d: distNM(ING_WHITE, e.datos) }))
     .sort((x, y) => prioridad(y.b) - prioridad(x.b) || x.d - y.d);
   $('#cuenta-buques').textContent = buques.size;
+  if (config.rol === 'central') renderResumenFlota();
   if (!lista.length) {
     let mensaje = 'Ningún buque coincide con el filtro.';
     if (!buques.size) {
@@ -397,6 +414,27 @@ $('#buscar').addEventListener('input', renderLista);
 $('#filtro-tipo').addEventListener('change', renderLista);
 $('#ver-vectores').addEventListener('change', animar);
 $('#ver-estelas').addEventListener('change', (e) => (e.target.checked ? capaEstelas.addTo(map) : capaEstelas.remove()));
+
+// Resumen para la oficina: cuántos barcos pescan, navegan, están en puerto o sin señal
+function renderResumenFlota() {
+  const cuenta = { alerta: 0, pescando: 0, navegando: 0, puerto: 0, sinSenal: 0 };
+  for (const e of buques.values()) {
+    const b = e.datos;
+    if (categoria(b) === 'emergencia') cuenta.alerta++;
+    else if (senalVieja(e)) cuenta.sinSenal++;
+    else if (b.estado === 7) cuenta.pescando++;
+    else if (enMovimiento(b)) cuenta.navegando++;
+    else cuenta.puerto++;
+  }
+  const chip = (n, texto, clase) => `<span class="chip ${clase}"><b>${n}</b> ${texto}</span>`;
+  $('#resumen-flota').innerHTML = [
+    cuenta.alerta ? chip(cuenta.alerta, 'con alerta', 'chip-peligro') : '',
+    chip(cuenta.pescando, 'pescando', 'chip-pesca'),
+    chip(cuenta.navegando, 'navegando', 'chip-nav'),
+    chip(cuenta.puerto, 'en puerto', 'chip-puerto'),
+    cuenta.sinSenal ? chip(cuenta.sinSenal, 'sin señal', 'chip-aviso') : '',
+  ].join('');
+}
 
 function irA(mmsi) {
   seleccionar(mmsi);
@@ -503,6 +541,7 @@ function ponerModo() {
 
 function conectar() {
   if (PRACTICA) { simulacionLocal(); return; }
+  if (DEMO_OFICINA) { simulacionOficina(); return; }
   if (!('EventSource' in window)) { estadoFuente = { modo: 'sin-datos' }; ponerModo(); return; }
   const fuente = new EventSource('api/buques');
   fuente.onmessage = (ev) => {
@@ -531,6 +570,21 @@ function simulacionLocal() {
   };
   paso();
   setInterval(paso, 2000);
+}
+
+// Oficina de demostración: una flota simulada en lugar de Trappi Central
+let flotaDemo = null;
+async function simulacionOficina() {
+  const { crearFlotaSimulada } = await import('./simulacion-flota.js');
+  flotaDemo = crearFlotaSimulada();
+  const paso = () => {
+    flotaDemo.paso();
+    const lista = flotaDemo.buques();
+    procesar({ modo: 'flota', conectado: true, ahora: Date.now(), buques: lista,
+      fuentes: [{ nombre: `Flota ${config.empresa} (simulada: ${lista.length} barcos)`, conectado: true, ultimo: Date.now(), mensajes: lista.length }] });
+  };
+  paso();
+  setInterval(paso, 3000);
 }
 
 // ---------- Tiempo, olas y mareas ----------
@@ -609,7 +663,7 @@ async function cargarTiempo() {
   };
   // En la demo sin conexión se usa un pronóstico de EJEMPLO, marcado como tal
   tiempoEjemplo = false;
-  if (PRACTICA && !datos.pron) {
+  if ((PRACTICA || MODO_DEMO) && !datos.pron) {
     const { pronosticoEjemplo } = await import('./tiempo-ejemplo.js');
     datos = { ...pronosticoEjemplo(), guardado: Date.now() };
     tiempoEjemplo = true;
@@ -1118,9 +1172,14 @@ async function verRecorrido(b, horas = 24) {
   capaHistorial.clearLayers();
   if (historialDe === b.id) { historialDe = null; renderFicha(); return; }
   try {
-    const r = await fetch(`api/historial?buque=${encodeURIComponent(b.id)}&horas=${horas}`);
-    const datos = await r.json();
-    if (!r.ok) throw new Error(datos.error);
+    let datos;
+    if (flotaDemo) {
+      datos = { puntos: flotaDemo.historial(b.id, horas) };
+    } else {
+      const r = await fetch(`api/historial?buque=${encodeURIComponent(b.id)}&horas=${horas}`);
+      datos = await r.json();
+      if (!r.ok) throw new Error(datos.error);
+    }
     historialDe = b.id;
     if (datos.puntos.length) {
       const linea = L.polyline(datos.puntos.map(([la, lo]) => [la, lo]), { color: '#7c5cff', weight: 3, opacity: 0.85 }).addTo(capaHistorial);
@@ -1140,16 +1199,23 @@ const recorrido = (puntos) => puntos.reduce((t, p, i) => (i ? t + distNM({ lat: 
 
 // ---------- Configuración según dónde corre: PC del barco u oficina ----------
 async function cargarConfig() {
-  try {
-    const r = await fetch('api/config');
-    if (r.status === 401) { location.href = 'login.html'; return; }
-    if (r.ok) config = await r.json();
-  } catch { /* sin servidor: se queda como equipo de a bordo */ }
+  if (DEMO_OFICINA) {
+    const { EMPRESA_DEMO } = await import('./simulacion-flota.js');
+    config = { rol: 'central', empresa: EMPRESA_DEMO, usuario: 'demostración', demo: true };
+  } else if (!PRACTICA) {
+    try {
+      const r = await fetch('api/config');
+      if (r.status === 401) { location.href = 'login.html'; return; }
+      if (r.ok) config = await r.json();
+    } catch { /* sin servidor: se queda como equipo de a bordo */ }
+  }
   if (config.rol === 'central') {
     $('#titulo-producto').textContent = '· Monitoreo de flota';
     $('#sesion').hidden = false;
     $('#sesion').textContent = `${config.empresa} · ${config.usuario}`;
-    $('#btn-salir').hidden = false;
+    $('#btn-salir').hidden = Boolean(config.demo);
+    $('#btn-demo-sos').hidden = !config.demo;
+    $('#resumen-flota').hidden = false;
     $('#btn-mob').hidden = true;
     $('#btn-gps').hidden = true;
     $('#filtro-tipo').value = '';
@@ -1159,6 +1225,14 @@ async function cargarConfig() {
   }
   renderEstado();
 }
+// Demostración: simular que un barco envía un hombre al agua, y terminarlo
+$('#btn-demo-sos').addEventListener('click', () => {
+  if (!flotaDemo) return;
+  if (flotaDemo.hayAlerta()) flotaDemo.terminarSOS();
+  else flotaDemo.simularSOS();
+  $('#btn-demo-sos').innerHTML = flotaDemo.hayAlerta() ? '✓<span> Terminar SOS</span>' : '🧪<span> Simular SOS</span>';
+});
+
 $('#btn-salir').addEventListener('click', async () => {
   try { await fetch('api/logout', { method: 'POST' }); } catch { /* igual se sale */ }
   location.href = 'login.html';

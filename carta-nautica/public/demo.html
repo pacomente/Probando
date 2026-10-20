@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Trappi Demo</title>
+  <meta name="description" content="Demostración de Trappi Tecnología: la carta a bordo y el monitoreo de flota de la oficina, con datos simulados.">
+  <meta name="theme-color" content="#0b1d2e">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
+  <style>
+    /* Portada oscura, como el puente de noche: dos entradas al sistema, a bordo y oficina */
+    :root {
+      --fondo: #0b1d2e;
+      --panel: #10263b;
+      --panel-2: #163352;
+      --borde: #24496d;
+      --texto: #e6f0fa;
+      --suave: #8fb0cc;
+      --acento: #3fb6ff;
+      --flota: #7c5cff;
+      --peligro: #ff4d4f;
+      --fuente: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      min-height: 100%;
+      background: radial-gradient(1100px 520px at 15% -10%, #163a5c 0%, var(--fondo) 62%) fixed, var(--fondo);
+      color: var(--texto);
+      font: 15px/1.55 var(--fuente);
+    }
+    .envoltura {
+      max-width: 980px;
+      margin: 0 auto;
+      padding-block: 32px 40px;
+      padding-left: max(16px, env(safe-area-inset-left, 0px));
+      padding-right: max(16px, env(safe-area-inset-right, 0px));
+      display: grid;
+      gap: 28px;
+    }
+    .marca { display: flex; align-items: center; gap: 12px; }
+    .marca img { width: 44px; height: 44px; border-radius: 10px; }
+    .marca b { display: block; font-size: 20px; font-weight: 900; letter-spacing: 0.14em; line-height: 1.1; }
+    .marca span { color: var(--suave); }
+    h1 { font-size: clamp(26px, 4vw, 38px); line-height: 1.15; margin: 0 0 8px; text-wrap: balance; }
+    .bajada { color: var(--suave); max-width: 62ch; margin: 0; }
+    .coordenada { font: 12px var(--mono); color: var(--suave); letter-spacing: 0.04em; }
+    .opciones { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .opcion {
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 10px;
+      padding: 22px;
+      background: var(--panel);
+      border: 1px solid var(--borde);
+      border-radius: 16px;
+      color: inherit;
+      text-decoration: none;
+      transition: border-color 0.15s, transform 0.15s;
+      min-width: 0;
+    }
+    .opcion:hover, .opcion:focus-visible { border-color: var(--acento); transform: translateY(-2px); outline: none; }
+    .opcion.oficina:hover, .opcion.oficina:focus-visible { border-color: var(--flota); }
+    .etiqueta { font: 600 11px var(--fuente); letter-spacing: 0.12em; text-transform: uppercase; color: var(--acento); }
+    .oficina .etiqueta { color: var(--flota); }
+    .opcion h2 { font-size: 21px; margin: 0; }
+    .opcion ul { margin: 0; padding-left: 18px; color: var(--suave); }
+    .opcion li { margin-bottom: 4px; }
+    .boton {
+      justify-self: start;
+      padding: 10px 16px;
+      border-radius: 10px;
+      background: var(--acento);
+      color: #04121f;
+      font-weight: 700;
+    }
+    .oficina .boton { background: var(--flota); color: #fff; }
+    .aviso {
+      display: flex;
+      gap: 12px;
+      padding: 14px 16px;
+      border: 1px dashed var(--borde);
+      border-radius: 12px;
+      color: var(--suave);
+      font-size: 14px;
+    }
+    .aviso b { color: var(--texto); }
+    footer { color: var(--suave); font-size: 12px; }
+    @media (prefers-reduced-motion: reduce) { .opcion { transition: none; } .opcion:hover { transform: none; } }
+  </style>
+</head>
+<body>
+  <main class="envoltura">
+    <div class="marca">
+      <img src="icono.svg" alt="">
+      <div><b>TRAPPI</b><span>Tecnología</span></div>
+    </div>
+
+    <section>
+      <div class="coordenada">38°47,6' S · 062°16,2' O · Ría de Bahía Blanca</div>
+      <h1>Carta náutica y monitoreo de flota pesquera</h1>
+      <p class="bajada">El sistema tiene dos partes: la carta que usa la tripulación en el puente y la vista de la oficina
+        en tierra, que sigue a toda la flota por Starlink. Elegí cuál querés ver.</p>
+    </section>
+
+    <div class="opciones">
+      <a class="opcion abordo" href="./?demo=abordo" id="ir-abordo">
+        <span class="etiqueta">En el barco</span>
+        <h2>Trappi a bordo</h2>
+        <ul>
+          <li>Tráfico AIS de la ría y la flota de la empresa.</li>
+          <li>Riesgo de abordaje con las reglas del RIPA.</li>
+          <li>Hombre al agua, MAYDAY y guía OMI.</li>
+          <li>Avisos de temporal, viento y mareas.</li>
+        </ul>
+        <span class="boton">Abrir la carta del barco →</span>
+      </a>
+      <a class="opcion oficina" href="./?demo=oficina" id="ir-oficina">
+        <span class="etiqueta">En la oficina</span>
+        <h2>Trappi Central</h2>
+        <ul>
+          <li>Toda la flota en vivo: pescando, navegando y en puerto.</li>
+          <li>Alarma cuando un barco envía hombre al agua o MAYDAY.</li>
+          <li>Recorrido de las últimas 24 horas de cada barco.</li>
+          <li>Barcos sin señal marcados al instante.</li>
+        </ul>
+        <span class="boton">Abrir la vista de la oficina →</span>
+      </a>
+    </div>
+
+    <div class="aviso">
+      <span aria-hidden="true">🧪</span>
+      <span><b>Demostración con datos simulados.</b> Los barcos, la empresa y el pronóstico son de ejemplo y están marcados
+        como tales. En la oficina, el botón «Simular SOS» hace que un barco envíe un hombre al agua.</span>
+    </div>
+
+    <footer>© Trappi Tecnología · Sistema de apoyo y monitoreo de flota. No reemplaza las cartas oficiales ni los equipos de navegación del buque.</footer>
+  </main>
+</body>
+</html>

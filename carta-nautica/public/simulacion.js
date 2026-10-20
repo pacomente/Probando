@@ -27,8 +27,9 @@ const FLOTA = [
 
 const DESVIO_ESTRIBOR_MN = 0.12; // cada buque navega por su mitad del canal
 
-export function crearSimulacion() {
-  const buques = FLOTA.map((d) => {
+// flota: lista de buques a simular (por defecto, el tráfico de práctica de la ría)
+export function crearSimulacion(flota = FLOTA) {
+  const buques = flota.map((d) => {
     const b = { ...d, sim: true, sentido: d.sentido || 1 };
     if (d.ruta) {
       b.tramos = longitudes(d.ruta);
@@ -54,7 +55,7 @@ export function crearSimulacion() {
 
   function lista() {
     return buques.map((b) => ({
-      mmsi: b.mmsi, nombre: b.nombre, tipo: b.tipo, lat: b.lat, lon: b.lon,
+      id: b.id, mmsi: b.mmsi, nombre: b.nombre, tipo: b.tipo, lat: b.lat, lon: b.lon,
       sog: Math.round((b.sogActual ?? b.sog) * 10) / 10,
       cog: Math.round(b.cog ?? 0), rumbo: Math.round(b.cog ?? 0), estado: b.estado ?? 0,
       destino: b.destino, eslora: b.eslora, manga: b.manga, calado: b.calado, callsign: b.callsign, sim: true,

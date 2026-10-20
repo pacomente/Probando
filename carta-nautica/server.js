@@ -302,6 +302,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`🧭 Trappi a bordo · Trappi Tecnología → http://localhost:${PORT}`);
+  console.log(`   Demostración (a bordo y oficina) → http://localhost:${PORT}/demo.html`);
   if (modo === 'ais') console.log(`   Fuentes: ${resumenFuentes().map((f) => f.nombre).join(', ')}`);
   else if (modo === 'flota') console.log('   Sin fuentes AIS: se muestran solo los barcos de la flota desde Trappi Central');
   else console.log('   Modo: SIMULACIÓN (configurá el .env para ver datos reales)');

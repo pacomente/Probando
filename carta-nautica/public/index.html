@@ -27,6 +27,7 @@
       <button id="btn-gps" title="Mostrar mi posición (GPS, funciona sin internet)">📍<span> Mi posición</span></button>
       <button id="btn-avisos" title="Recibir avisos en el teléfono">🔔<span> Avisos</span></button>
       <button id="btn-noche" title="Modo noche (luz roja, cuida la visión nocturna)">🌙<span> Noche</span></button>
+      <button id="btn-demo-sos" class="btn-alerta" title="Demostración: un barco envía hombre al agua" hidden>🧪<span> Simular SOS</span></button>
       <button id="btn-salir" title="Cerrar sesión" hidden>⎋<span> Salir</span></button>
       <button id="btn-panel" class="solo-movil" title="Panel">☰</button>
     </nav>
@@ -74,6 +75,7 @@
       </div>
 
       <div class="vista activa" id="vista-buques">
+        <div id="resumen-flota" class="resumen-flota" hidden></div>
         <div class="filtros">
           <input id="buscar" type="search" placeholder="Buscar nombre o MMSI…">
           <select id="filtro-tipo">
