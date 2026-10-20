@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Carta Náutica Bahía Blanca</title>
+  <meta name="theme-color" content="#0b1d2e">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="barra">
+    <div class="marca">
+      <span class="logo">⚓</span>
+      <div>
+        <h1>Carta Náutica · Bahía Blanca</h1>
+        <div class="sub"><span id="modo" class="modo">Conectando…</span> <span id="reloj"></span></div>
+      </div>
+    </div>
+    <nav class="acciones">
+      <button id="btn-regla" title="Medir distancia y rumbo">📏<span> Regla</span></button>
+      <button id="btn-gps" title="Mostrar mi posición (GPS)">📍<span> Mi posición</span></button>
+      <button id="btn-avisos" title="Recibir avisos de tormenta en el teléfono">🔔<span> Avisos</span></button>
+      <button id="btn-noche" title="Modo noche (luz roja, cuida la visión nocturna)">🌙<span> Noche</span></button>
+      <button id="btn-panel" class="solo-movil" title="Panel">☰</button>
+    </nav>
+  </header>
+
+  <div id="alerta-tormenta" class="alerta-tormenta" hidden></div>
+
+  <main class="contenido">
+    <div id="mapa"></div>
+    <div id="coordenadas" class="coordenadas"></div>
+    <div id="regla-info" class="regla-info" hidden></div>
+    <section id="ficha" class="ficha" hidden></section>
+
+    <aside id="panel" class="panel">
+      <div class="pestanas" role="tablist">
+        <button class="activa" data-pestana="buques">🚢 Buques <b id="cuenta-buques">0</b></button>
+        <button data-pestana="tiempo">🌬 Tiempo</button>
+        <button data-pestana="mareas">🌊 Mareas</button>
+        <button data-pestana="alertas">⚠ Alertas <b id="cuenta-alertas">0</b></button>
+      </div>
+
+      <div class="vista activa" id="vista-buques">
+        <div class="filtros">
+          <input id="buscar" type="search" placeholder="Buscar nombre o MMSI…">
+          <select id="filtro-tipo">
+            <option value="">Todos</option>
+            <option value="carga">Carga</option>
+            <option value="tanquero">Tanqueros</option>
+            <option value="pasajeros">Pasajeros</option>
+            <option value="pesca">Pesca</option>
+            <option value="servicio">Prácticos / autoridad / remolque</option>
+            <option value="recreo">Recreo / vela</option>
+            <option value="otro">Otros</option>
+          </select>
+        </div>
+        <label class="check"><input type="checkbox" id="ver-vectores" checked> Vectores de 6 min</label>
+        <label class="check"><input type="checkbox" id="ver-estelas" checked> Estelas</label>
+        <ul id="lista-buques" class="lista"></ul>
+        <div id="leyenda" class="leyenda"></div>
+      </div>
+
+      <div class="vista" id="vista-tiempo">
+        <div id="tiempo-actual" class="tarjetas"><p class="nota">Cargando pronóstico…</p></div>
+        <h3>Próximas 48 horas</h3>
+        <div class="tabla-scroll"><table id="tabla-pronostico" class="tabla"></table></div>
+        <p class="nota">Pronóstico de Open-Meteo para la ría. Confirmá siempre con el
+          <a href="https://www.smn.gob.ar/" target="_blank" rel="noopener">SMN</a> y los radioavisos de Prefectura.</p>
+      </div>
+
+      <div class="vista" id="vista-mareas">
+        <div id="mareas-resumen" class="tarjetas"></div>
+        <div id="grafico-marea" class="grafico"></div>
+        <p class="nota">Altura del mar sobre el nivel medio en la boca de la ría, según modelo global.
+          Dentro de la ría (Ing. White) la marea es bastante mayor y llega más tarde: para navegar usá las
+          <a href="https://www.hidro.gov.ar/oceanografia/tmareas/form_tmareas.asp" target="_blank" rel="noopener">tablas de marea del SHN</a>.</p>
+      </div>
+
+      <div class="vista" id="vista-alertas">
+        <label class="fila">Alertar abordaje si CPA menor a
+          <select id="umbral-cpa">
+            <option value="0.2">0,2 MN</option>
+            <option value="0.5" selected>0,5 MN</option>
+            <option value="1">1 MN</option>
+          </select>
+          en menos de 20 min
+        </label>
+        <ul id="lista-alertas" class="lista alertas"></ul>
+      </div>
+
+      <footer class="aviso-legal">
+        Herramienta de estudio y seguimiento. <b>No apta para navegación</b>: usá las cartas oficiales del
+        Servicio de Hidrografía Naval y los avisos a los navegantes de Prefectura. Posiciones de puertos y canal aproximadas.
+      </footer>
+    </aside>
+  </main>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
