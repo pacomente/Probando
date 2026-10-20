@@ -51,3 +51,36 @@ function velocidad(b) {
   const cog = rad(b.cog || 0);
   return { x: sog * Math.sin(cog), y: sog * Math.cos(cog) };
 }
+
+// Jerarquía de la Regla 18 del RIPA/COLREG (OMI), por estado de navegación AIS.
+// Número menor = más privilegiado; los buques con número mayor se mantienen apartados.
+const JERARQUIA = { 2: 0, 3: 1, 4: 2, 7: 3, 8: 4 }; // sin gobierno, maniobra restringida, calado, pesca, vela
+const NOMBRE_JERARQUIA = ['sin gobierno', 'con capacidad de maniobra restringida', 'restringido por su calado', 'dedicado a la pesca', 'de vela'];
+
+// Qué situación de las Reglas 13 a 15 y 18 del RIPA forman dos buques que se aproximan.
+// Devuelve quién debe maniobrar ('a', 'b' o 'ambos') y la regla que lo dice.
+export function situacionRIPA(a, b) {
+  const marcacionB = (rumbo(a, b) - a.cog + 360) % 360; // dónde ve A a B, respecto de su proa
+  const marcacionA = (rumbo(b, a) - b.cog + 360) % 360;
+  // Alcance primero: la Regla 13 prevalece sobre la 18
+  const popa = (m) => m > 112.5 && m < 247.5; // más de 22,5° a popa del través
+  if (popa(marcacionA)) return { tipo: 'Alcance', regla: 13, cede: 'a', motivo: 'alcanza al otro por su popa' };
+  if (popa(marcacionB)) return { tipo: 'Alcance', regla: 13, cede: 'b', motivo: 'alcanza al otro por su popa' };
+
+  const ra = JERARQUIA[a.estado] ?? 5;
+  const rb = JERARQUIA[b.estado] ?? 5;
+  if (ra !== rb && Math.min(ra, rb) <= 4) {
+    const cede = ra < rb ? 'b' : 'a';
+    const privilegiado = cede === 'a' ? b : a;
+    return { tipo: 'Responsabilidades entre buques', regla: 18, cede,
+      motivo: `el otro buque está ${NOMBRE_JERARQUIA[Math.min(ra, rb)]}${privilegiado.estado === 4 ? ' (no estorbarle)' : ''}` };
+  }
+
+  const diferencia = Math.abs(((a.cog - b.cog + 540) % 360) - 180); // 180 = rumbos opuestos
+  const proa = (m) => m < 10 || m > 350;
+  if (diferencia > 170 && proa(marcacionB) && proa(marcacionA)) {
+    return { tipo: 'Vuelta encontrada', regla: 14, cede: 'ambos', motivo: 'rumbos opuestos: los dos caen a estribor y se cruzan babor con babor' };
+  }
+  if (marcacionB < 180) return { tipo: 'Cruce', regla: 15, cede: 'a', motivo: 'tiene al otro por su estribor' };
+  return { tipo: 'Cruce', regla: 15, cede: 'b', motivo: 'tiene al otro por su estribor' };
+}

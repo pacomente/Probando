@@ -231,8 +231,12 @@ body.noche #mapa { background: #000; }
 .solo-movil { display: none; }
 
 @media (max-width: 760px) {
+  .barra { flex-wrap: wrap; row-gap: 6px; }
+  .acciones { width: 100%; justify-content: space-between; }
   .acciones span { display: none; }
-  .acciones button { padding: 6px 8px; }
+  .acciones button { padding: 6px 8px; flex: 1; }
+  .acciones .btn-mob span { display: inline; }
+  .leaflet-bottom { bottom: 44px; }
   .solo-movil { display: inline-block; }
   h1 { font-size: 14px; }
   .logo { display: none; }
@@ -244,7 +248,7 @@ body.noche #mapa { background: #000; }
     bottom: 0;
     width: auto;
     height: 55%;
-    z-index: 950;
+    z-index: 1100; /* por encima de los controles del mapa */
     border-left: 0;
     border-top: 1px solid var(--borde);
     border-radius: 14px 14px 0 0;
@@ -253,9 +257,125 @@ body.noche #mapa { background: #000; }
     padding-bottom: env(safe-area-inset-bottom);
   }
   .panel.abierto { transform: none; }
-  .coordenadas { bottom: 52px; }
+  .coordenadas { bottom: 66px; font-size: 11px; }
   .alerta-tormenta { font-size: 12px; padding: 6px 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .alerta-tormenta[hidden] { display: none; }
-  .ficha { top: auto; bottom: 52px; }
+  .ficha { top: auto; bottom: 96px; left: 10px; max-width: calc(100% - 20px); max-height: 60%; overflow-y: auto; }
 }
 .sin-etiquetas .buque .etiqueta { display: none; }
+
+/* ---------- Emergencias, OMI y estado de los datos ---------- */
+.btn-mob { background: var(--peligro); border-color: var(--peligro); color: #fff; font-weight: 800; }
+.conexion { font-weight: 700; padding: 0 6px; border-radius: 4px; background: var(--peligro); color: #fff; }
+.modo.sin-datos { background: var(--peligro); color: #fff; }
+.alerta-emergencia {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #d00000;
+  color: #fff;
+  font-weight: 800;
+  font-size: 15px;
+  cursor: pointer;
+  z-index: 1001;
+  animation: destello 0.8s infinite;
+}
+.alerta-emergencia[hidden] { display: none; }
+.alerta-emergencia button { background: #fff; color: #900; border: 0; font-weight: 700; flex-shrink: 0; }
+
+.mob {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 960;
+  width: 340px;
+  max-width: calc(100% - 20px);
+  max-height: calc(100% - 20px);
+  overflow-y: auto;
+  background: #2a0000;
+  color: #fff;
+  border: 2px solid var(--peligro);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+.mob h2 { margin: 0 0 6px; font-size: 18px; color: #ff6b6b; }
+.mob .mob-reloj { font: 800 28px ui-monospace, Menlo, monospace; }
+.mob .detalle { font-size: 12px; opacity: 0.8; margin-top: 4px; }
+.mob ol { padding-left: 18px; margin: 6px 0; font-size: 13px; }
+.mob summary { cursor: pointer; margin-top: 8px; font-weight: 700; }
+.mob a { color: #ffd23f; }
+.mob .botones { display: flex; gap: 6px; margin-top: 10px; }
+.mob-icono { background: none; border: 0; }
+.mob-icono span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: #ff0000;
+  border: 3px solid #fff;
+  color: #fff;
+  font: 800 10px var(--fuente);
+  animation: pulso 1s infinite;
+}
+
+.pestanas { grid-template-columns: repeat(5, 1fr); }
+.pestana-sos { color: #ff7a7a !important; font-weight: 700; }
+.sos-llamar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.btn-llamar {
+  display: inline-block;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--peligro);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+}
+.sos-canal { font-size: 14px; }
+.pasos { padding-left: 18px; font-size: 13px; }
+.sos-tipos label { display: block; padding: 4px 0; font-size: 13px; }
+.sos-tipos span { color: var(--suave); font-size: 12px; }
+.sos-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
+.sos-form select, .sos-form textarea { grid-column: span 2; }
+.sos-form textarea { resize: vertical; font: inherit; color: var(--texto); background: var(--panel-2); border: 1px solid var(--borde); border-radius: 8px; padding: 6px 10px; }
+.sos-mensaje {
+  white-space: pre-wrap;
+  background: #000;
+  color: #7dff9b;
+  border-radius: 8px;
+  padding: 10px;
+  font: 600 13px/1.5 ui-monospace, Menlo, monospace;
+  margin: 8px 0;
+}
+body.noche .sos-mensaje { color: #ff6b6b; }
+details { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; font-size: 13px; }
+details summary { cursor: pointer; font-weight: 600; }
+details ul { padding-left: 18px; margin: 8px 0 0; }
+details li { margin-bottom: 4px; }
+.tabla.izq td { text-align: left; white-space: normal; }
+.fonetico { line-height: 1.8; }
+
+.estado-datos { font-size: 13px; }
+.estado-datos div { display: flex; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--borde); }
+.estado-datos .luz { width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+.estado-datos .ok { background: var(--ok); }
+.estado-datos .mal { background: var(--peligro); }
+.estado-datos .med { background: var(--aviso); }
+.nota-alerta { background: var(--aviso); color: #1d1300; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; }
+
+.buque.vieja { opacity: 0.4; }
+.buque.emergencia svg { animation: pulso 0.8s infinite; }
+.leaflet-costa-pane path { stroke-linejoin: round; }
+body.noche .leaflet-costa-pane { filter: invert(1) hue-rotate(180deg) brightness(0.45) sepia(1) saturate(4) hue-rotate(-30deg); }
+@keyframes pulso { 50% { transform: scale(1.25); } }
+
+@media (max-width: 760px) {
+  .pestanas button { font-size: 11px; padding: 10px 2px; }
+  .alerta-emergencia { font-size: 13px; padding: 8px 10px; }
+  .mob { top: 6px; }
+}

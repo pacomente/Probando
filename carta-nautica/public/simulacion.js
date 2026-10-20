@@ -21,6 +21,7 @@ const FLOTA = [
   { mmsi: 701000107, nombre: 'DON VICENTE (SIM)', tipo: 30, sog: 4, centro: [-39.15, -61.9], radio: 6, estado: 7, eslora: 24, manga: 7 },
   { mmsi: 701000108, nombre: 'SANTA ROSA II (SIM)', tipo: 30, sog: 3.5, centro: [-39.28, -61.62], radio: 7, estado: 7, eslora: 20, manga: 6 },
   { mmsi: 701000109, nombre: 'ALBATROS (SIM)', tipo: 36, sog: 5, centro: [-38.94, -62.03], radio: 2, eslora: 11, manga: 3.5 },
+  { mmsi: 970999001, nombre: 'SART TEST (SIM)', tipo: null, sog: 0.4, centro: [-39.12, -61.98], radio: 0.3, estado: 15, mensajeSeguridad: 'SART TEST' },
   { mmsi: 701000110, nombre: 'RIO NEGRO TRADER (SIM)', tipo: 70, sog: 0.1, fijo: [-39.06, -61.86], cog: 210, estado: 1, destino: 'ING WHITE', eslora: 199, manga: 30, calado: 9.8 },
 ];
 
@@ -57,6 +58,7 @@ export function crearSimulacion() {
       sog: Math.round((b.sogActual ?? b.sog) * 10) / 10,
       cog: Math.round(b.cog ?? 0), rumbo: Math.round(b.cog ?? 0), estado: b.estado ?? 0,
       destino: b.destino, eslora: b.eslora, manga: b.manga, calado: b.calado, callsign: b.callsign, sim: true,
+      precision: 1, mensajeSeguridad: b.mensajeSeguridad,
     }));
   }
 

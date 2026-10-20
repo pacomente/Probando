@@ -1,13 +1,17 @@
 // Servidor de la Carta Náutica de Bahía Blanca: sirve la página y retransmite los buques.
-// Con AISSTREAM_API_KEY recibe posiciones AIS reales de aisstream.io; sin clave, simula el tráfico.
+// Fuentes AIS reales: aisstream.io por internet (AISSTREAM_API_KEY) y/o un receptor AIS a bordo
+// por UDP (AIS_UDP_PORT) o TCP (AIS_TCP), que funciona sin internet. Sin ninguna, simula el tráfico.
 // Sin dependencias externas: solo módulos nativos de Node (>= 22, que trae WebSocket).
 import http from 'node:http';
+import dgram from 'node:dgram';
+import net from 'node:net';
 import { readFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RegistroBuques } from './public/registro.js';
 import { crearSimulacion } from './public/simulacion.js';
+import { checksumValido, crearDecodificador } from './ais-nmea.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -22,11 +26,18 @@ if (existsSync(envPath)) {
 
 const PORT = Number(process.env.PORT) || 3001;
 const API_KEY = (process.env.AISSTREAM_API_KEY || '').trim();
+const UDP_PORT = Number(process.env.AIS_UDP_PORT) || null;
+const TCP = (process.env.AIS_TCP || '').trim(); // host:puerto
 // Zona que se escucha: toda la ría de Bahía Blanca y su acceso desde el mar
 const ZONA = [[-39.6, -62.6], [-38.6, -60.9]];
 
 const registro = new RegistroBuques();
-const estado = { modo: API_KEY && typeof WebSocket !== 'undefined' ? 'ais' : 'simulacion', conectado: false, ultimoMensaje: null };
+const fuentes = {};
+if (API_KEY && typeof WebSocket !== 'undefined') fuentes.internet = { nombre: 'aisstream.io (internet)', conectado: false, ultimo: null, mensajes: 0 };
+if (UDP_PORT) fuentes.udp = { nombre: `Receptor a bordo (UDP ${UDP_PORT})`, conectado: false, ultimo: null, mensajes: 0, descartados: 0 };
+if (TCP) fuentes.tcp = { nombre: `Receptor a bordo (TCP ${TCP})`, conectado: false, ultimo: null, mensajes: 0, descartados: 0 };
+const modo = Object.keys(fuentes).length ? 'ais' : 'simulacion';
+const recibido = (f) => { f.ultimo = Date.now(); f.mensajes++; };
 
 // ---------- Datos AIS reales ----------
 let espera = 2000;
@@ -34,13 +45,13 @@ function conectarAIS() {
   const ws = new WebSocket('wss://stream.aisstream.io/v0/stream');
   ws.binaryType = 'arraybuffer';
   ws.onopen = () => {
-    estado.conectado = true;
+    fuentes.internet.conectado = true;
     espera = 2000;
     console.log('⚓ Conectado a aisstream.io');
     ws.send(JSON.stringify({
       APIKey: API_KEY,
       BoundingBoxes: [ZONA],
-      FilterMessageTypes: ['PositionReport', 'StandardClassBPositionReport', 'ExtendedClassBPositionReport', 'ShipStaticData', 'StaticDataReport'],
+      FilterMessageTypes: ['PositionReport', 'StandardClassBPositionReport', 'ExtendedClassBPositionReport', 'ShipStaticData', 'StaticDataReport', 'SafetyBroadcastMessage'],
     }));
   };
   ws.onmessage = (evento) => {
@@ -49,11 +60,11 @@ function conectarAIS() {
       const msg = JSON.parse(texto);
       if (msg.error) return console.error('aisstream.io:', msg.error);
       procesarAIS(msg);
-      estado.ultimoMensaje = Date.now();
+      recibido(fuentes.internet);
     } catch { /* mensaje no válido: se ignora */ }
   };
   ws.onclose = () => {
-    estado.conectado = false;
+    fuentes.internet.conectado = false;
     console.log(`AIS desconectado; reintento en ${espera / 1000} s`);
     setTimeout(conectarAIS, espera);
     espera = Math.min(espera * 2, 60000);
@@ -76,6 +87,7 @@ function procesarAIS(msg) {
       sog: m.Sog < 102.3 ? m.Sog : null,
       cog: m.Cog < 360 ? m.Cog : null,
       rumbo: m.TrueHeading < 360 ? m.TrueHeading : null,
+      precision: m.PositionAccuracy ? 1 : 0,
       estado: tipoMsg === 'PositionReport' ? m.NavigationalStatus : null,
       claseB: tipoMsg !== 'PositionReport',
     });
@@ -86,6 +98,8 @@ function procesarAIS(msg) {
       callsign: limpiar(m.CallSign), imo: m.ImoNumber || null, calado: m.MaximumStaticDraught || null,
       eslora: d.A + d.B || null, manga: d.C + d.D || null, eta: eta(m.Eta),
     });
+  } else if (tipoMsg === 'SafetyBroadcastMessage') {
+    registro.actualizar({ mmsi, nombre, mensajeSeguridad: limpiar(m.Text), horaMensaje: Date.now() });
   } else if (tipoMsg === 'StaticDataReport') {
     const d = m.ReportB?.Dimension || {};
     registro.actualizar({
@@ -114,10 +128,58 @@ function arrancarSimulacion() {
   }, 1000);
 }
 
-if (estado.modo === 'ais') conectarAIS();
-else {
-  if (API_KEY) console.warn('Esta versión de Node no trae WebSocket: usa Node 22 o superior. Arranco en simulación.');
+// ---------- Receptor AIS a bordo (sin internet) ----------
+function procesarNMEA(texto, fuente) {
+  for (const linea of texto.split(/\r?\n/)) {
+    const limpia = linea.trim().replace(/^\\[^\\]*\\/, '');
+    if (!limpia) continue;
+    if (/^!..VD[MO]/.test(limpia) && !checksumValido(limpia)) {
+      fuente.descartados++; // sentencia corrupta: no se usa
+      continue;
+    }
+    const datos = fuente.decodificar(limpia);
+    if (datos) {
+      registro.actualizar(datos);
+      recibido(fuente);
+    }
+  }
+}
+
+function escucharUDP() {
+  const f = fuentes.udp;
+  f.decodificar = crearDecodificador();
+  const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+  socket.on('message', (msg) => procesarNMEA(msg.toString('latin1'), f));
+  socket.on('error', (e) => console.error('UDP AIS:', e.message));
+  socket.bind(UDP_PORT, () => { f.conectado = true; console.log(`📡 Escuchando AIS por UDP en el puerto ${UDP_PORT}`); });
+}
+
+function conectarTCP() {
+  const f = fuentes.tcp;
+  f.decodificar = crearDecodificador();
+  const [host, puerto] = TCP.split(':');
+  let resto = '';
+  const socket = net.connect(Number(puerto), host, () => { f.conectado = true; console.log(`📡 Conectado al receptor AIS ${TCP}`); });
+  socket.on('data', (d) => {
+    const texto = resto + d.toString('latin1');
+    const corte = texto.lastIndexOf('\n');
+    resto = corte < 0 ? texto : texto.slice(corte + 1);
+    if (corte >= 0) procesarNMEA(texto.slice(0, corte), f);
+  });
+  socket.on('error', () => {});
+  socket.on('close', () => { f.conectado = false; setTimeout(conectarTCP, 5000); });
+}
+
+if (fuentes.internet) conectarAIS();
+if (fuentes.udp) escucharUDP();
+if (fuentes.tcp) conectarTCP();
+if (modo === 'simulacion') {
+  if (API_KEY) console.warn('Esta versión de Node no trae WebSocket: usa Node 22 o superior.');
   arrancarSimulacion();
+}
+
+function resumenFuentes() {
+  return Object.values(fuentes).map(({ nombre, conectado, ultimo, mensajes, descartados }) => ({ nombre, conectado, ultimo, mensajes, descartados }));
 }
 
 // ---------- HTTP ----------
@@ -128,6 +190,7 @@ const MIME = {
   '.js': 'text/javascript; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.webmanifest': 'application/manifest+json',
   '.json': 'application/json',
 };
 
@@ -135,7 +198,9 @@ function enviarBuques(req, res) {
   res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
   const enviar = () => {
     const buques = registro.lista().map(({ ultimaEstela, ...b }) => b);
-    res.write(`data: ${JSON.stringify({ modo: estado.modo, conectado: estado.conectado, ultimoMensaje: estado.ultimoMensaje, ahora: Date.now(), buques })}\n\n`);
+    const lista = resumenFuentes();
+    const conectado = modo === 'simulacion' || lista.some((f) => f.conectado && f.ultimo && Date.now() - f.ultimo < 120000);
+    res.write(`data: ${JSON.stringify({ modo, conectado, fuentes: lista, ahora: Date.now(), buques })}\n\n`);
   };
   enviar();
   const intervalo = setInterval(enviar, 2000);
@@ -153,7 +218,7 @@ const server = http.createServer(async (req, res) => {
   }
   try {
     const contenido = await readFile(ruta);
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(ruta)] || 'application/octet-stream' });
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(ruta)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     res.end(contenido);
   } catch {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -163,5 +228,5 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`🧭 Carta Náutica de Bahía Blanca en http://localhost:${PORT}`);
-  console.log(estado.modo === 'ais' ? '   Modo: AIS en vivo (aisstream.io)' : '   Modo: SIMULACIÓN (pon AISSTREAM_API_KEY en .env para ver buques reales)');
+  console.log(modo === 'ais' ? `   Fuentes AIS: ${resumenFuentes().map((f) => f.nombre).join(', ')}` : '   Modo: SIMULACIÓN (configurá AISSTREAM_API_KEY o AIS_UDP_PORT en .env para ver buques reales)');
 });

@@ -1,7 +1,12 @@
-// Carta Náutica de Bahía Blanca: mapa, buques en movimiento, tiempo, mareas y alertas.
-import { cpa, destino, distNM, rumbo } from './navegacion.js';
+// Carta Náutica de Bahía Blanca: mapa, buques en movimiento, tiempo, mareas, alertas y emergencias.
+// Funciona sin internet: la página queda guardada en el dispositivo (sw.js), la costa viene incluida
+// (costa.js), el GPS y el MOB no necesitan red y el último pronóstico se guarda.
+import { cpa, destino, distNM, rumbo, situacionRIPA } from './navegacion.js';
 import { RegistroBuques } from './registro.js';
 import { CANAL_PRINCIPAL, crearSimulacion } from './simulacion.js';
+import { COSTA } from './costa.js';
+import { alarma, crearGeneradorSocorro, crearMOB, emergencia, silenciarAlarma } from './emergencia.js';
+import { $, esc, fmtPos, grados, guardar, hace, leer, leerJSON, num } from './util.js';
 
 const ZONA_HORARIA = 'America/Argentina/Buenos_Aires';
 const ING_WHITE = { lat: -38.7935, lon: -62.27 };
@@ -9,6 +14,9 @@ const PUNTO_PRONOSTICO = { lat: -38.95, lon: -62.0 };
 const PUNTO_MAR = { lat: -39.1, lon: -61.6 };
 const MINUTOS_VECTOR = 6;
 const TCPA_MAX_MIN = 20;
+const ESTIMA_MAX_MS = 3 * 60000; // más allá, no se adivina: se muestra la última posición recibida
+const SENAL_VIEJA_MS = 6 * 60000; // sin señal hace más de esto: posición poco fiable
+const PRACTICA = new URLSearchParams(location.search).has('practica');
 
 // Posiciones aproximadas, solo como referencia en la carta
 const PUERTOS = [
@@ -22,6 +30,7 @@ const PUERTOS = [
 ];
 
 const TIPOS = {
+  emergencia: { color: '#ff0000', nombre: 'Emergencia (SART / MOB / EPIRB)' },
   carga: { color: '#2ecc71', nombre: 'Carga' },
   tanquero: { color: '#ff4d4f', nombre: 'Tanquero' },
   pasajeros: { color: '#3f8cff', nombre: 'Pasajeros' },
@@ -46,6 +55,7 @@ const BANDERAS = { 701: 'Argentina', 710: 'Brasil', 770: 'Uruguay', 725: 'Chile'
 const BEAUFORT = ['Calma', 'Ventolina', 'Flojito', 'Flojo', 'Bonancible', 'Fresquito', 'Fresco', 'Frescachón',
   'Temporal', 'Temporal fuerte', 'Temporal duro', 'Temporal muy duro', 'Huracán'];
 const LIMITES_BEAUFORT = [1, 4, 7, 11, 17, 22, 28, 34, 41, 48, 56, 64];
+const OLA_BEAUFORT = ['0', '0,1', '0,2', '0,6', '1', '2', '3', '4', '5,5', '7', '9', '11,5', '14 o más'];
 
 const CODIGOS_TIEMPO = {
   0: ['☀️', 'Despejado'], 1: ['🌤', 'Mayormente despejado'], 2: ['⛅', 'Parcialmente nublado'], 3: ['☁️', 'Nublado'],
@@ -56,20 +66,24 @@ const CODIGOS_TIEMPO = {
   95: ['⛈', 'Tormenta eléctrica'], 96: ['⛈', 'Tormenta con granizo'], 99: ['⛈', 'Tormenta fuerte con granizo'],
 };
 
-const $ = (sel) => document.querySelector(sel);
-const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const num = (n, dec = 1) => (n == null || Number.isNaN(n) ? '—' : n.toFixed(dec).replace('.', ','));
-const grados = (g) => (g == null ? '—' : `${String(Math.round(g) % 360).padStart(3, '0')}°`);
-
-function guardar(clave, valor) { try { localStorage.setItem(clave, valor); } catch { /* sin almacenamiento */ } }
-function leer(clave) { try { return localStorage.getItem(clave); } catch { return null; } }
-
 // ---------- Mapa ----------
 const map = L.map('mapa', { zoomControl: true, worldCopyJump: true }).setView([-38.97, -61.95], 10);
+
+// La costa incluida en la página se dibuja debajo de las teselas: si no hay internet, se sigue viendo
+map.createPane('costa');
+map.getPane('costa').style.zIndex = 150;
+L.geoJSON(COSTA, {
+  pane: 'costa',
+  interactive: false,
+  attribution: '© OpenStreetMap', // mismo texto que la carta: el mapa lo muestra una sola vez
+  style: { color: '#6b5a3e', weight: 1, fillColor: '#efe6cf', fillOpacity: 1 },
+}).addTo(map);
+
 const capasBase = {
-  'Carta (OpenStreetMap)': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }),
-  'Satélite': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, attribution: 'Imágenes © Esri' }),
-  'Oscuro': L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 19, attribution: '© OpenStreetMap © CARTO' }),
+  'Carta (OpenStreetMap)': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, crossOrigin: true, attribution: '© OpenStreetMap' }),
+  'Satélite': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, crossOrigin: true, attribution: 'Imágenes © Esri' }),
+  'Oscuro': L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 19, crossOrigin: true, attribution: '© OpenStreetMap © CARTO' }),
+  'Solo costa (sin internet)': L.layerGroup(),
 };
 capasBase['Carta (OpenStreetMap)'].addTo(map);
 const marcasNauticas = L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenSeaMap' }).addTo(map);
@@ -79,39 +93,30 @@ const capaRiesgo = L.layerGroup().addTo(map);
 const capaBuques = L.layerGroup().addTo(map);
 const capaViento = L.layerGroup().addTo(map);
 const capaPuertos = L.layerGroup().addTo(map);
-const capaCanal = L.layerGroup().addTo(map);
+const capaCanal = L.layerGroup(); // trazado aproximado: apagado por defecto para no confundirlo con el real
 
 L.polyline(CANAL_PRINCIPAL, { color: '#d633ff', weight: 2, dashArray: '8 6', opacity: 0.8 })
-  .bindTooltip('Canal Principal de acceso (trazado aproximado)', { sticky: true })
+  .bindTooltip('Canal Principal: trazado APROXIMADO. Guiate por las boyas reales (capa OpenSeaMap) y la carta del SHN.', { sticky: true })
   .addTo(capaCanal);
 for (const p of PUERTOS) {
   L.marker([p.lat, p.lon], { icon: L.divIcon({ className: 'puerto-icono', html: p.icono, iconSize: [20, 20] }) })
-    .bindPopup(`<b>${esc(p.nombre)}</b><br>${esc(p.info)}<br><small>${fmtPos(p)} (aprox.)</small>`)
+    .bindPopup(`<b>${esc(p.nombre)}</b><br>${esc(p.info)}<br><small>${fmtPos(p)} (posición aproximada)</small>`)
     .addTo(capaPuertos);
 }
 
 L.control.layers(capasBase, {
   'Balizas, boyas y faros (OpenSeaMap)': marcasNauticas,
   'Viento en la ría': capaViento,
-  'Puertos': capaPuertos,
+  'Puertos (aprox.)': capaPuertos,
   'Canal Principal (aprox.)': capaCanal,
   'Riesgo de abordaje': capaRiesgo,
 }, { collapsed: true }).addTo(map);
 L.control.scale({ imperial: false }).addTo(map);
 
-map.on('baselayerchange', (e) => map.getContainer().classList.toggle('mapa-oscuro', e.name !== 'Carta (OpenStreetMap)'));
+map.on('baselayerchange', (e) => map.getContainer().classList.toggle('mapa-oscuro', !e.name.startsWith('Carta')));
 const actualizarEtiquetas = () => map.getContainer().classList.toggle('sin-etiquetas', map.getZoom() < 12);
 map.on('zoomend', actualizarEtiquetas);
 actualizarEtiquetas();
-
-function fmtCoord(v, pos, neg) {
-  const a = Math.abs(v);
-  let g = Math.floor(a);
-  let m = (a - g) * 60;
-  if (m >= 59.995) { g += 1; m = 0; }
-  return `${g}°${m.toFixed(2).padStart(5, '0').replace('.', ',')}' ${v < 0 ? neg : pos}`;
-}
-function fmtPos(p) { return `${fmtCoord(p.lat, 'N', 'S')}  ${fmtCoord(p.lon, 'E', 'O')}`; }
 
 function mostrarCoordenadas(latlng, prefijo = '') {
   const p = { lat: latlng.lat, lon: latlng.lng };
@@ -127,9 +132,13 @@ let seleccionado = null;
 let siguiendo = false;
 let riesgos = [];
 let propio = null;
-let estadoFuente = { modo: null, conectado: false };
+let estadoFuente = { modo: null, conectado: false, fuentes: [] };
+let ultimoPaquete = null;
 
-function categoria(tipo) {
+function categoria(b) {
+  const em = emergencia(b);
+  if (em && !em.prueba) return 'emergencia';
+  const tipo = b.tipo;
   if (tipo >= 70 && tipo <= 79) return 'carga';
   if (tipo >= 80 && tipo <= 89) return 'tanquero';
   if (tipo >= 60 && tipo <= 69) return 'pasajeros';
@@ -139,7 +148,10 @@ function categoria(tipo) {
   return 'otro';
 }
 
-function descripcionTipo(t) {
+function descripcionTipo(b) {
+  const em = emergencia(b);
+  if (em) return em.prueba ? `${em.tipo} (en PRUEBA)` : em.tipo;
+  const t = b.tipo;
   const nombres = { 30: 'Pesquero', 31: 'Remolcando', 32: 'Remolcando (grande)', 33: 'Draga', 34: 'Buceo', 35: 'Militar',
     36: 'Velero', 37: 'Embarcación de recreo', 50: 'Lancha de prácticos', 51: 'Búsqueda y rescate', 52: 'Remolcador',
     53: 'Servicio portuario', 54: 'Anticontaminación', 55: 'Autoridad / guardacostas', 58: 'Transporte sanitario' };
@@ -151,29 +163,33 @@ function descripcionTipo(t) {
   return t ? `Tipo AIS ${t}` : 'Tipo no informado';
 }
 
-function bandera(mmsi) {
-  const mid = Number(String(mmsi).slice(0, 3));
-  return BANDERAS[mid] || null;
-}
-
+const bandera = (mmsi) => BANDERAS[Number(String(mmsi).slice(0, 3))] || null;
 const enMovimiento = (b) => b.sog != null && b.sog >= 0.5 && b.cog != null;
+const edad = (e, ahora = Date.now()) => ahora - e.recibido;
+const senalVieja = (e) => edad(e) > SENAL_VIEJA_MS;
 
-function posicionEstimada(entrada, ahora = Date.now()) {
-  const b = entrada.datos;
-  if (!enMovimiento(b)) return { lat: b.lat, lon: b.lon };
-  const horas = Math.min(ahora - entrada.recibido, 3 * 60000) / 3600000;
-  return destino(b, b.cog, b.sog * horas);
+function posicionEstimada(e, ahora = Date.now()) {
+  const b = e.datos;
+  const ms = edad(e, ahora);
+  if (!enMovimiento(b) || ms > ESTIMA_MAX_MS || ms < 0) return { lat: b.lat, lon: b.lon };
+  return destino(b, b.cog, (b.sog * ms) / 3600000);
 }
 
-function iconoBuque(b, sel) {
-  const color = TIPOS[categoria(b.tipo)].color;
-  const forma = enMovimiento(b)
-    ? '<path d="M0,-12 L6,7 L0,3 L-6,7 Z" stroke="#06121d" stroke-width="1.2"/>'
-    : '<circle r="5" stroke="#06121d" stroke-width="1.2"/>';
-  const emergencia = b.estado === 14 ? '<circle r="11" fill="none" stroke="#ff2020" stroke-width="2"/>' : '';
+function iconoBuque(b, sel, vieja) {
+  const cat = categoria(b);
+  const color = TIPOS[cat].color;
+  let forma;
+  if (emergencia(b)) {
+    forma = '<circle r="8" fill="#fff" stroke="#ff0000" stroke-width="3"/><path d="M-5,-5 L5,5 M5,-5 L-5,5" stroke="#ff0000" stroke-width="3"/>';
+  } else if (enMovimiento(b)) {
+    forma = '<path d="M0,-12 L6,7 L0,3 L-6,7 Z" stroke="#06121d" stroke-width="1.2"/>';
+  } else {
+    forma = '<circle r="5" stroke="#06121d" stroke-width="1.2"/>';
+  }
+  const clases = ['buque', sel && 'sel', vieja && 'vieja', cat === 'emergencia' && 'emergencia'].filter(Boolean).join(' ');
   return L.divIcon({
-    className: `buque${sel ? ' sel' : ''}`,
-    html: `<svg width="26" height="26" viewBox="-13 -13 26 26" fill="${color}">${emergencia}${forma}</svg><span class="etiqueta">${esc(b.nombre || b.mmsi)}</span>`,
+    className: clases,
+    html: `<svg width="26" height="26" viewBox="-13 -13 26 26" fill="${color}">${forma}</svg><span class="etiqueta">${esc(b.nombre || b.mmsi)}</span>`,
     iconSize: [26, 26],
     iconAnchor: [13, 13],
   });
@@ -181,12 +197,14 @@ function iconoBuque(b, sel) {
 
 function procesar(paquete) {
   estadoFuente = paquete;
+  ultimoPaquete = Date.now();
   ponerModo();
   const ahoraLocal = Date.now();
   const desfase = ahoraLocal - (paquete.ahora || ahoraLocal);
   const vistos = new Set();
 
   for (const b of paquete.buques) {
+    if (!Number.isFinite(b.lat) || !Number.isFinite(b.lon)) continue;
     vistos.add(b.mmsi);
     let e = buques.get(b.mmsi);
     if (!e) {
@@ -199,16 +217,10 @@ function procesar(paquete) {
     }
     if (!e.datos || e.datos.actualizado !== b.actualizado) e.recibido = (b.actualizado || ahoraLocal) + desfase;
     e.datos = b;
-    const color = TIPOS[categoria(b.tipo)].color;
+    const color = TIPOS[categoria(b)].color;
     e.estela.setStyle({ color });
     e.vector.setStyle({ color });
     e.estela.setLatLngs(b.estela || []);
-    const clave = `${categoria(b.tipo)}|${enMovimiento(b)}|${b.nombre}|${b.estado}|${seleccionado === b.mmsi}`;
-    if (clave !== e.clave) {
-      e.marcador.setIcon(iconoBuque(b, seleccionado === b.mmsi));
-      e.marcador.bindTooltip(esc(b.nombre || `MMSI ${b.mmsi}`), { direction: 'top', offset: [0, -10] });
-      e.clave = clave;
-    }
   }
   for (const [mmsi, e] of buques) {
     if (!vistos.has(mmsi)) {
@@ -219,11 +231,26 @@ function procesar(paquete) {
       if (seleccionado === mmsi) cerrarFicha();
     }
   }
+  refrescarIconos();
   calcularRiesgos();
   animar();
   renderLista();
   renderFicha();
   renderAlertas();
+}
+
+// Los iconos cambian si cambia el tipo, el estado, la selección o si la señal envejece
+function refrescarIconos() {
+  for (const [mmsi, e] of buques) {
+    const b = e.datos;
+    const vieja = senalVieja(e);
+    const clave = `${categoria(b)}|${enMovimiento(b)}|${b.nombre}|${b.estado}|${seleccionado === mmsi}|${vieja}`;
+    if (clave === e.clave) continue;
+    e.marcador.setIcon(iconoBuque(b, seleccionado === mmsi, vieja));
+    e.marcador.setZIndexOffset(categoria(b) === 'emergencia' ? 1000 : 0);
+    e.marcador.bindTooltip(esc(b.nombre || `MMSI ${b.mmsi}`), { direction: 'top', offset: [0, -10] });
+    e.clave = clave;
+  }
 }
 
 function animar() {
@@ -235,8 +262,8 @@ function animar() {
     const svg = e.marcador.getElement()?.querySelector('svg');
     const b = e.datos;
     const proa = b.rumbo ?? b.cog;
-    if (svg) svg.style.transform = proa != null && enMovimiento(b) ? `rotate(${proa}deg)` : '';
-    if (verVectores && enMovimiento(b)) {
+    if (svg) svg.style.transform = proa != null && enMovimiento(b) && !emergencia(b) ? `rotate(${proa}deg)` : '';
+    if (verVectores && enMovimiento(b) && !senalVieja(e)) {
       const f = destino(p, b.cog, (b.sog * MINUTOS_VECTOR) / 60);
       e.vector.setLatLngs([[p.lat, p.lon], [f.lat, f.lon]]);
     } else {
@@ -255,6 +282,7 @@ setInterval(animar, 500);
 
 let ticksSeguir = 0;
 setInterval(() => {
+  mob.actualizar();
   if (!siguiendo || !seleccionado) return;
   const e = buques.get(seleccionado);
   if (e && ++ticksSeguir % 2 === 0) {
@@ -269,12 +297,14 @@ function puntoActual(b) {
   return e ? { ...e.datos, ...posicionEstimada(e) } : b;
 }
 
-// ---------- Riesgo de abordaje (CPA / TCPA) ----------
+// ---------- Riesgo de abordaje (CPA / TCPA) y reglas del RIPA ----------
 function calcularRiesgos() {
   capaRiesgo.clearLayers();
   const umbral = Number($('#umbral-cpa').value);
-  const candidatos = [...buques.values()].map((e) => ({ ...e.datos, ...posicionEstimada(e) })).filter(enMovimiento);
-  if (propio && propio.sog != null) candidatos.push(propio);
+  // Solo buques con señal reciente: con una posición vieja el CPA no es fiable
+  const candidatos = [...buques.values()].filter((e) => !senalVieja(e) && !emergencia(e.datos))
+    .map((e) => ({ ...e.datos, ...posicionEstimada(e) })).filter(enMovimiento);
+  if (propio && enMovimiento(propio)) candidatos.push(propio);
   riesgos = [];
   for (let i = 0; i < candidatos.length; i++) {
     for (let j = i + 1; j < candidatos.length; j++) {
@@ -286,7 +316,7 @@ function calcularRiesgos() {
         const linea = L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: '#ff2d2d', weight: 2.5, dashArray: '4 6' })
           .bindTooltip(`⚠ CPA ${num(r.cpa, 2)} MN en ${Math.round(r.tcpaMin)} min`, { sticky: true })
           .addTo(capaRiesgo);
-        riesgos.push({ a, b, ...r, linea });
+        riesgos.push({ a, b, ...r, situacion: situacionRIPA(a, b), linea });
       }
     }
   }
@@ -294,38 +324,52 @@ function calcularRiesgos() {
 }
 $('#umbral-cpa').addEventListener('change', () => { calcularRiesgos(); renderAlertas(); });
 
+const nombreDe = (b) => (b === propio ? 'Tu embarcación' : b.nombre || `MMSI ${b.mmsi}`);
+
+function explicarRIPA(r) {
+  const s = r.situacion;
+  if (s.cede === 'ambos') return `${s.tipo} (Regla ${s.regla}): ${s.motivo}.`;
+  const cede = s.cede === 'a' ? r.a : r.b;
+  const sigue = s.cede === 'a' ? r.b : r.a;
+  const verbo = cede === propio ? 'VOS DEBÉS MANIOBRAR' : 'debe maniobrar';
+  return `${s.tipo} (Regla ${s.regla}): ${nombreDe(cede)} ${s.motivo}, ${verbo} con tiempo y claramente (Regla 16). ` +
+    `${nombreDe(sigue)} mantiene rumbo y velocidad, atento a maniobrar si hace falta (Regla 17).`;
+}
+
 // ---------- Lista y ficha ----------
 function renderLista() {
   const texto = $('#buscar').value.trim().toLowerCase();
   const tipo = $('#filtro-tipo').value;
-  const lista = [...buques.values()].map((e) => e.datos)
-    .filter((b) => (!tipo || categoria(b.tipo) === tipo) && (!texto || `${b.nombre} ${b.mmsi}`.toLowerCase().includes(texto)))
-    .map((b) => ({ b, d: distNM(ING_WHITE, b) }))
-    .sort((x, y) => Number(enMovimiento(y.b)) - Number(enMovimiento(x.b)) || x.d - y.d);
+  const prioridad = (b) => (categoria(b) === 'emergencia' ? 2 : enMovimiento(b) ? 1 : 0);
+  const lista = [...buques.values()]
+    .filter(({ datos: b }) => (!tipo || categoria(b) === tipo) && (!texto || `${b.nombre} ${b.mmsi}`.toLowerCase().includes(texto)))
+    .map((e) => ({ e, b: e.datos, d: distNM(ING_WHITE, e.datos) }))
+    .sort((x, y) => prioridad(y.b) - prioridad(x.b) || x.d - y.d);
   $('#cuenta-buques').textContent = buques.size;
   if (!lista.length) {
-    $('#lista-buques').innerHTML = `<li class="vacio">${buques.size ? 'Ningún buque coincide con el filtro.' : 'Esperando buques… La cobertura AIS en la ría depende de las estaciones en tierra; puede tardar unos minutos.'}</li>`;
+    let mensaje = 'Ningún buque coincide con el filtro.';
+    if (!buques.size) {
+      mensaje = estadoFuente.modo === 'sin-datos'
+        ? 'No llegan datos AIS. Revisá la conexión o el receptor. <b>No se muestran buques inventados</b> para no darte información falsa.'
+        : 'Esperando buques… La cobertura AIS en la ría depende de las estaciones receptoras; puede tardar unos minutos.';
+    }
+    $('#lista-buques').innerHTML = `<li class="vacio">${mensaje}</li>`;
     return;
   }
-  $('#lista-buques').innerHTML = lista.map(({ b, d }) => `
+  $('#lista-buques').innerHTML = lista.map(({ e, b, d }) => `
     <li data-mmsi="${esc(b.mmsi)}" class="${seleccionado === b.mmsi ? 'sel' : ''}">
-      <span class="punto" style="background:${TIPOS[categoria(b.tipo)].color}"></span>
+      <span class="punto" style="background:${TIPOS[categoria(b)].color}"></span>
       <div><div class="nombre">${esc(b.nombre || `MMSI ${b.mmsi}`)}</div>
-      <div class="detalle">${esc(descripcionTipo(b.tipo))}${b.destino ? ` → ${esc(b.destino)}` : ''}</div></div>
+      <div class="detalle">${esc(descripcionTipo(b))}${b.destino ? ` → ${esc(b.destino)}` : ''}</div></div>
       <div class="der">${enMovimiento(b) ? `${num(b.sog)} kn · ${grados(b.cog)}` : esc(ESTADOS_NAV[b.estado] || 'Detenido')}<br>
-      <span class="detalle">${num(d)} MN de Ing. White</span></div>
+      <span class="detalle">${senalVieja(e) ? `⚠ sin señal ${hace(edad(e))}` : `${num(d)} MN de Ing. White`}</span></div>
     </li>`).join('');
 }
 $('#lista-buques').addEventListener('click', (ev) => {
   const li = ev.target.closest('li[data-mmsi]');
   if (!li) return;
   const mmsi = Number(li.dataset.mmsi);
-  seleccionar(mmsi);
-  const e = buques.get(mmsi);
-  if (e) {
-    const p = posicionEstimada(e);
-    map.setView([p.lat, p.lon], Math.max(map.getZoom(), 13));
-  }
+  irA(mmsi);
   if (matchMedia('(max-width: 760px)').matches) $('#panel').classList.remove('abierto');
 });
 $('#buscar').addEventListener('input', renderLista);
@@ -333,33 +377,30 @@ $('#filtro-tipo').addEventListener('change', renderLista);
 $('#ver-vectores').addEventListener('change', animar);
 $('#ver-estelas').addEventListener('change', (e) => (e.target.checked ? capaEstelas.addTo(map) : capaEstelas.remove()));
 
+function irA(mmsi) {
+  seleccionar(mmsi);
+  const e = buques.get(mmsi);
+  if (e) {
+    const p = posicionEstimada(e);
+    map.setView([p.lat, p.lon], Math.max(map.getZoom(), 13));
+  }
+}
+
 function seleccionar(mmsi) {
-  const anterior = seleccionado;
   seleccionado = mmsi;
   siguiendo = false;
-  for (const id of [anterior, mmsi]) {
-    const e = buques.get(id);
-    if (e) { e.marcador.setIcon(iconoBuque(e.datos, id === seleccionado)); e.clave = null; }
-  }
+  refrescarIconos();
   animar();
   renderFicha();
   renderLista();
 }
 
 function cerrarFicha() {
-  const e = buques.get(seleccionado);
   seleccionado = null;
   siguiendo = false;
-  if (e) { e.marcador.setIcon(iconoBuque(e.datos, false)); e.clave = null; }
+  refrescarIconos();
   $('#ficha').hidden = true;
   renderLista();
-}
-
-function hace(ms) {
-  const s = Math.max(0, Math.round(ms / 1000));
-  if (s < 60) return `hace ${s} s`;
-  if (s < 3600) return `hace ${Math.round(s / 60)} min`;
-  return `hace ${Math.round(s / 3600)} h`;
 }
 
 function renderFicha() {
@@ -367,27 +408,34 @@ function renderFicha() {
   if (!e) { $('#ficha').hidden = true; return; }
   const b = e.datos;
   const p = posicionEstimada(e);
-  const pais = bandera(b.mmsi);
+  const ms = edad(e);
+  const estimada = enMovimiento(b) && ms > 10000 && ms <= ESTIMA_MAX_MS;
   const riesgo = riesgos.find((r) => r.a.mmsi === b.mmsi || r.b.mmsi === b.mmsi);
-  const otro = riesgo && (riesgo.a.mmsi === b.mmsi ? riesgo.b : riesgo.a);
+  const em = emergencia(b);
   const filas = [
-    ['MMSI', b.mmsi], ['IMO', b.imo], ['Indicativo', b.callsign], ['Bandera', pais],
+    ['MMSI', b.mmsi], ['IMO', b.imo], ['Indicativo', b.callsign], ['Bandera', bandera(b.mmsi)],
     ['Estado', ESTADOS_NAV[b.estado]], ['Velocidad', b.sog != null ? `${num(b.sog)} kn` : null],
     ['Rumbo (COG)', b.cog != null ? grados(b.cog) : null], ['Proa (HDG)', b.rumbo != null ? grados(b.rumbo) : null],
-    ['Posición', fmtPos(p)], ['Destino', b.destino], ['ETA', b.eta],
+    [estimada ? 'Posición (estimada)' : 'Posición', fmtPos(p)],
+    ['Precisión GPS', b.precision === 1 ? 'Alta (menos de 10 m)' : b.precision === 0 ? 'Normal (más de 10 m)' : null],
+    ['Destino', b.destino], ['ETA', b.eta],
     ['Eslora × manga', b.eslora ? `${b.eslora} × ${b.manga ?? '—'} m` : null], ['Calado', b.calado ? `${num(b.calado)} m` : null],
     ['Ing. White', `${num(distNM(ING_WHITE, p))} MN al ${grados(rumbo(ING_WHITE, p))}`],
     ['Desde mí', propio ? `${num(distNM(propio, p))} MN al ${grados(rumbo(propio, p))}` : null],
-    ['Señal AIS', b.sim ? 'simulada' : hace(Date.now() - e.recibido)],
+    ['Mensaje AIS', b.mensajeSeguridad],
+    ['Datos descartados', b.saltosDescartados ? `${b.saltosDescartados} posiciones imposibles` : null],
+    ['Señal AIS', b.sim ? 'simulada (práctica)' : hace(ms)],
   ].filter(([, v]) => v != null && v !== '');
   $('#ficha').hidden = false;
   $('#ficha').innerHTML = `
     <button class="cerrar" id="ficha-cerrar" title="Cerrar">✕</button>
     <h2>${esc(b.nombre || `MMSI ${b.mmsi}`)}</h2>
-    <div class="tipo"><span class="punto" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${TIPOS[categoria(b.tipo)].color}"></span>
-      ${esc(descripcionTipo(b.tipo))}${b.claseB ? ' · AIS clase B' : ''}</div>
+    <div class="tipo"><span class="punto" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${TIPOS[categoria(b)].color}"></span>
+      ${esc(descripcionTipo(b))}${b.claseB ? ' · AIS clase B' : ''}</div>
+    ${em && !em.prueba ? '<div class="riesgo">🆘 EMERGENCIA: avisá a Prefectura (106 / VHF 16) con esta posición.</div>' : ''}
+    ${senalVieja(e) ? `<div class="riesgo">⚠ Sin señal ${esc(hace(ms))}: la posición puede no ser la real.</div>` : ''}
     <dl>${filas.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
-    ${riesgo ? `<div class="riesgo">⚠ Riesgo de abordaje con ${esc(otro.nombre || otro.mmsi)}: CPA ${num(riesgo.cpa, 2)} MN en ${Math.round(riesgo.tcpaMin)} min</div>` : ''}
+    ${riesgo ? `<div class="riesgo">⚠ Riesgo de abordaje: CPA ${num(riesgo.cpa, 2)} MN en ${Math.round(riesgo.tcpaMin)} min.<br>${esc(explicarRIPA(riesgo))}</div>` : ''}
     <div class="botones">
       <button id="ficha-seguir" class="${siguiendo ? 'activo' : ''}">🎯 ${siguiendo ? 'Siguiendo' : 'Seguir'}</button>
       <button id="ficha-centrar">⌖ Centrar</button>
@@ -399,7 +447,7 @@ function renderFicha() {
 
 $('#leyenda').innerHTML = Object.values(TIPOS)
   .map((t) => `<span><span class="punto" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${t.color}"></span>${esc(t.nombre)}</span>`)
-  .join('') + '<span>▲ navegando · ● detenido</span><span style="color:#ff2d2d">- - riesgo de abordaje</span>';
+  .join('') + '<span>▲ navegando · ● detenido</span><span>Transparente: sin señal reciente</span><span style="color:#ff2d2d">- - riesgo de abordaje</span>';
 
 // ---------- Fuente de datos ----------
 function ponerModo() {
@@ -408,29 +456,39 @@ function ponerModo() {
   if (modo === 'ais' && conectado) {
     el.textContent = 'AIS EN VIVO';
     el.className = 'modo vivo';
-    el.title = 'Posiciones reales recibidas de aisstream.io';
+    el.title = (estadoFuente.fuentes || []).map((f) => f.nombre).join(' · ');
   } else if (modo === 'ais') {
-    el.textContent = 'AIS: reconectando…';
-    el.className = 'modo';
+    el.textContent = 'AIS: SIN SEÑAL';
+    el.className = 'modo sin-datos';
+    el.title = 'El servidor no recibe datos AIS en este momento';
   } else if (modo === 'simulacion') {
-    el.textContent = local ? 'SIMULACIÓN (sin servidor)' : 'SIMULACIÓN';
+    el.textContent = local ? 'PRÁCTICA (simulación)' : 'SIMULACIÓN';
     el.className = 'modo sim';
-    el.title = 'Buques de práctica. Configurá AISSTREAM_API_KEY en el servidor para ver los reales.';
+    el.title = 'Buques de práctica, NO reales. Configurá una fuente AIS en el servidor para ver los reales.';
+  } else if (modo === 'sin-datos') {
+    el.textContent = 'SIN DATOS AIS';
+    el.className = 'modo sin-datos';
+    el.title = 'No hay conexión con el servidor AIS';
   }
 }
 
 function conectar() {
-  let recibido = false;
-  let fuente;
-  try { fuente = new EventSource('api/buques'); } catch { simulacionLocal(); return; }
-  fuente.onmessage = (ev) => { recibido = true; procesar(JSON.parse(ev.data)); };
-  fuente.onerror = () => {
-    if (!recibido) { fuente.close(); simulacionLocal(); return; }
-    estadoFuente = { ...estadoFuente, conectado: false, modo: estadoFuente.modo === 'simulacion' ? 'simulacion' : 'ais' };
-    ponerModo();
+  if (PRACTICA) { simulacionLocal(); return; }
+  if (!('EventSource' in window)) { estadoFuente = { modo: 'sin-datos' }; ponerModo(); return; }
+  const fuente = new EventSource('api/buques');
+  fuente.onmessage = (ev) => {
+    try { procesar(JSON.parse(ev.data)); } catch { /* paquete dañado: se espera el siguiente */ }
   };
+  // EventSource reintenta solo; mientras tanto se avisa y los buques se van marcando como "sin señal"
+  fuente.onerror = () => {
+    estadoFuente = { ...estadoFuente, modo: 'sin-datos', conectado: false };
+    ponerModo();
+    renderLista();
+  };
+  setTimeout(() => { if (!ultimoPaquete) { estadoFuente = { modo: 'sin-datos' }; ponerModo(); renderLista(); } }, 6000);
 }
 
+// Solo con ?practica en la dirección: nunca se inventan buques sin que se pida
 function simulacionLocal() {
   const sim = crearSimulacion();
   const registro = new RegistroBuques();
@@ -448,6 +506,8 @@ function simulacionLocal() {
 
 // ---------- Tiempo, olas y mareas ----------
 let alertasTiempo = [];
+let tiempoGuardado = null; // hora del pronóstico en uso
+let tiempoSinConexion = false;
 const notificadas = new Set();
 
 const beaufort = (kn) => LIMITES_BEAUFORT.filter((l) => kn >= l).length;
@@ -459,11 +519,19 @@ const horaLocal = (ms) => new Date(ms).toLocaleTimeString('es-AR', { hour: '2-di
 const diaHora = (ms) => new Date(ms).toLocaleString('es-AR', { weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: ZONA_HORARIA });
 const colorViento = (kn) => (kn < 11 ? '#3ddc97' : kn < 22 ? '#ffd23f' : kn < 34 ? '#ffb020' : '#ff4d4f');
 
+$('#tabla-beaufort').innerHTML = '<tr><th>Fuerza</th><th>Nombre</th><th>Nudos</th><th>Ola m</th></tr>' + BEAUFORT.map((n, f) => {
+  const desde = f === 0 ? 0 : LIMITES_BEAUFORT[f - 1];
+  const hasta = LIMITES_BEAUFORT[f];
+  return `<tr><td>${f}</td><td>${n}</td><td>${hasta ? (f === 0 ? 'menos de 1' : `${desde}–${hasta - 1}`) : `${desde} o más`}</td><td>${OLA_BEAUFORT[f]}</td></tr>`;
+}).join('');
+
 function serie(datos) {
   const h = datos?.hourly;
-  if (!h) return null;
+  if (!h?.time?.length) return null;
   const off = datos.utc_offset_seconds || 0;
-  return { ...h, ms: h.time.map((t) => Date.parse(`${t}Z`) - off * 1000) };
+  const ms = h.time.map((t) => Date.parse(`${t}Z`) - off * 1000);
+  if (Date.now() > ms.at(-1)) return null; // pronóstico vencido: mejor no mostrarlo
+  return { ...h, ms };
 }
 
 function indiceAhora(s) {
@@ -474,13 +542,19 @@ function indiceAhora(s) {
 }
 
 async function obtener(url) {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
+  const control = new AbortController();
+  const corte = setTimeout(() => control.abort(), 15000);
+  try {
+    const r = await fetch(url, { signal: control.signal });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return await r.json();
+  } finally {
+    clearTimeout(corte);
+  }
 }
 
 async function cargarTiempo() {
-  const comunes = { timezone: ZONA_HORARIA, past_days: '1', forecast_days: '3' };
+  const comunes = { timezone: ZONA_HORARIA, past_days: '1', forecast_days: '4' };
   const urlPronostico = 'https://api.open-meteo.com/v1/forecast?' + new URLSearchParams({
     latitude: PUNTO_PRONOSTICO.lat, longitude: PUNTO_PRONOSTICO.lon, wind_speed_unit: 'kn', ...comunes,
     hourly: 'temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,weather_code,visibility,precipitation_probability',
@@ -497,18 +571,38 @@ async function cargarTiempo() {
   });
 
   const [pron, mar, viento] = await Promise.allSettled([obtener(urlPronostico), obtener(urlMar), obtener(urlMalla)]);
-  const f = pron.status === 'fulfilled' ? serie(pron.value) : null;
-  const m = mar.status === 'fulfilled' ? serie(mar.value) : null;
+  let datos = {
+    pron: pron.status === 'fulfilled' ? pron.value : null,
+    mar: mar.status === 'fulfilled' ? mar.value : null,
+    malla: viento.status === 'fulfilled' ? [].concat(viento.value) : null,
+    guardado: Date.now(),
+  };
+  tiempoSinConexion = !datos.pron;
+  if (datos.pron && datos.mar) {
+    guardar('carta-tiempo', JSON.stringify(datos));
+  } else {
+    // Sin conexión: se usa el último pronóstico guardado (cubre hasta 4 días)
+    const previo = leerJSON('carta-tiempo');
+    if (previo) datos = { pron: datos.pron || previo.pron, mar: datos.mar || previo.mar, malla: datos.malla, guardado: datos.pron ? datos.guardado : previo.guardado };
+  }
+  tiempoGuardado = datos.pron ? datos.guardado : null;
 
+  const f = serie(datos.pron);
+  const m = serie(datos.mar);
   if (f) renderTiempo(f, m);
-  else $('#tiempo-actual').innerHTML = '<p class="nota">No se pudo cargar el pronóstico (¿sin conexión?). Reintento en 2 minutos.</p>';
+  else $('#tiempo-actual').innerHTML = '<p class="nota">Sin pronóstico: no hay conexión y no hay ninguno guardado vigente. Reintento en 2 minutos.</p>';
   if (m) renderMareas(m);
-  else $('#mareas-resumen').innerHTML = '<p class="nota">No se pudieron cargar las olas y mareas. Reintento en 2 minutos.</p>';
-  if (viento.status === 'fulfilled') renderVientoMapa(malla, [].concat(viento.value));
+  else $('#mareas-resumen').innerHTML = '<p class="nota">Sin datos de olas y marea. Reintento en 2 minutos.</p>';
+  capaViento.clearLayers();
+  if (datos.malla) renderVientoMapa(malla, datos.malla); // el viento "actual" guardado no se muestra: ya no sería actual
+
+  const origen = $('#tiempo-origen');
+  origen.hidden = !tiempoSinConexion || !f;
+  origen.textContent = `⚠ Sin conexión: pronóstico guardado ${hace(Date.now() - tiempoGuardado)} (${diaHora(tiempoGuardado)}). Puede haber cambiado.`;
 
   alertasTiempo = f ? analizarTiempo(f, m) : [];
   renderAlertas();
-  setTimeout(cargarTiempo, f && m ? 15 * 60000 : 2 * 60000);
+  setTimeout(cargarTiempo, !tiempoSinConexion && datos.mar ? 15 * 60000 : 2 * 60000);
 }
 
 function renderTiempo(f, m) {
@@ -523,7 +617,7 @@ function renderTiempo(f, m) {
   const ola = m ? m.wave_height[im] : null;
   const vis = f.visibility?.[i];
   $('#tiempo-actual').innerHTML = `
-    <div class="tarjeta ancha"><div class="etq">Viento ahora</div>
+    <div class="tarjeta ancha"><div class="etq">Viento ${tiempoSinConexion ? 'previsto para ahora' : 'ahora'}</div>
       <div class="valor" style="color:${colorViento(kn)}"><span class="flecha" style="transform:rotate(${dir + 180}deg)">⬆</span>
         ${num(kn, 0)} kn del ${cardinal(dir)}</div>
       <div class="extra">Fuerza ${bft} Beaufort · ${BEAUFORT[bft]} · ráfagas ${num(f.wind_gusts_10m[i], 0)} kn · ${grados(dir)}</div></div>
@@ -539,7 +633,7 @@ function renderTiempo(f, m) {
   for (let k = i; k < Math.min(i + 48, f.ms.length); k += 3) {
     const v = f.wind_speed_10m[k];
     const r = f.wind_gusts_10m[k];
-    const km = m ? m.ms.findIndex((t) => t === f.ms[k]) : -1;
+    const km = m ? m.ms.indexOf(f.ms[k]) : -1;
     const clase = (x) => (x >= 34 ? 'f8' : x >= 22 ? 'f6' : '');
     filas.push(`<tr><td>${diaHora(f.ms[k])}</td><td class="${clase(v)}">${num(v, 0)}</td><td class="${clase(r)}">${num(r, 0)}</td>
       <td><span class="flecha" style="transform:rotate(${f.wind_direction_10m[k] + 180}deg)">⬆</span> ${cardinal(f.wind_direction_10m[k])}</td>
@@ -550,10 +644,9 @@ function renderTiempo(f, m) {
 }
 
 function renderVientoMapa(malla, datos) {
-  capaViento.clearLayers();
   datos.forEach((d, k) => {
     const c = d?.current;
-    if (!c) return;
+    if (!c || !malla[k]) return;
     const kn = c.wind_speed_10m;
     const color = colorViento(kn);
     const html = `<div class="flecha-viento" style="transform:rotate(${c.wind_direction_10m + 180}deg)">
@@ -576,34 +669,34 @@ function analizarTiempo(f, m) {
   for (let k = i0; k <= fin; k++) {
     const v = Math.max(f.wind_speed_10m[k], f.wind_gusts_10m[k] - 7); // ráfagas pesan algo menos que el viento medio
     if (v > peor.v) peor = { v, k };
-    if (!tormenta && [95, 96, 99].includes(f.weather_code[k])) tormenta = k;
-    if (!niebla && f.visibility?.[k] != null && f.visibility[k] < 1000) niebla = k;
+    if (tormenta == null && [95, 96, 99].includes(f.weather_code[k])) tormenta = k;
+    if (niebla == null && f.visibility?.[k] != null && f.visibility[k] < 1000) niebla = k;
     if (k >= 3) {
       const d = f.pressure_msl[k] - f.pressure_msl[k - 3];
       if (d < caida.d) caida = { d, k };
     }
   }
+  const cuando = (k) => (k === i0 ? 'AHORA' : diaHora(f.ms[k]));
 
   if (peor.v >= 0) {
     const k = peor.k;
     const viento = f.wind_speed_10m[k];
     const rafaga = f.wind_gusts_10m[k];
     const dir = f.wind_direction_10m[k];
-    const cuando = k === i0 ? 'AHORA' : diaHora(f.ms[k]);
     const sector = dir >= 180 && dir <= 270 ? ' Viento del sector S-SO: posible pampero, con cambio brusco de viento y bajada de temperatura.'
       : dir >= 90 && dir < 180 ? ' Viento del sector SE: posible sudestada, con mar de fondo y crecida de la marea.' : '';
     if (viento >= 34 || rafaga >= 41) {
       alertas.push({ nivel: 'peligro', icono: '🌪', clave: `temporal-${f.ms[k]}`,
         titulo: viento >= 48 || rafaga >= 56 ? 'TEMPORAL DURO' : 'TEMPORAL',
-        texto: `${cuando}: viento ${num(viento, 0)} kn del ${cardinal(dir)}, ráfagas ${num(rafaga, 0)} kn (Fuerza ${beaufort(viento)}). Embarcaciones menores: no salir o buscar abrigo.${sector}` });
+        texto: `${cuando(k)}: viento ${num(viento, 0)} kn del ${cardinal(dir)}, ráfagas ${num(rafaga, 0)} kn (Fuerza ${beaufort(viento)}). Embarcaciones menores: no salir o buscar abrigo.${sector}` });
     } else if (viento >= 22 || rafaga >= 30) {
       alertas.push({ nivel: 'aviso', icono: '💨', clave: `fuerte-${f.ms[k]}`, titulo: 'Viento fuerte',
-        texto: `${cuando}: viento ${num(viento, 0)} kn del ${cardinal(dir)}, ráfagas ${num(rafaga, 0)} kn (Fuerza ${beaufort(viento)}). Precaución en embarcaciones menores.${sector}` });
+        texto: `${cuando(k)}: viento ${num(viento, 0)} kn del ${cardinal(dir)}, ráfagas ${num(rafaga, 0)} kn (Fuerza ${beaufort(viento)}). Precaución en embarcaciones menores.${sector}` });
     }
   }
   if (tormenta != null) {
     alertas.push({ nivel: 'peligro', icono: '⛈', clave: `tormenta-${f.ms[tormenta]}`, titulo: 'TORMENTA ELÉCTRICA',
-      texto: `${tormenta === i0 ? 'AHORA' : diaHora(f.ms[tormenta])}: ${CODIGOS_TIEMPO[f.weather_code[tormenta]][1]}. Riesgo de rayos, ráfagas súbitas y chaparrones con poca visibilidad.` });
+      texto: `${cuando(tormenta)}: ${CODIGOS_TIEMPO[f.weather_code[tormenta]][1]}. Riesgo de rayos, ráfagas súbitas y chaparrones con poca visibilidad.` });
   }
   if (caida.d <= -4) {
     alertas.push({ nivel: caida.d <= -6 ? 'peligro' : 'aviso', icono: '📉', clave: `presion-${f.ms[caida.k]}`, titulo: 'Caída rápida de presión',
@@ -611,7 +704,7 @@ function analizarTiempo(f, m) {
   }
   if (niebla != null) {
     alertas.push({ nivel: 'aviso', icono: '🌫', clave: `niebla-${f.ms[niebla]}`, titulo: 'Niebla',
-      texto: `${niebla === i0 ? 'AHORA' : diaHora(f.ms[niebla])}: visibilidad menor a 0,5 MN. Navegar con radar, velocidad de seguridad y señales fónicas (RIPA regla 19 y 35).` });
+      texto: `${cuando(niebla)}: visibilidad menor a 0,5 MN. Navegar con radar, velocidad de seguridad y señales fónicas (RIPA Reglas 19 y 35).` });
   }
   if (m) {
     const j0 = indiceAhora(m);
@@ -625,6 +718,7 @@ function analizarTiempo(f, m) {
         texto: `Olas de ${num(olaMax.h)} m en la boca de la ría (${diaHora(m.ms[olaMax.k])}).` });
     }
   }
+  if (tiempoSinConexion) for (const a of alertas) a.texto += ' (Pronóstico guardado, sin conexión.)';
   return alertas;
 }
 
@@ -659,7 +753,7 @@ function renderMareas(m) {
   const proxBaja = extremos.find((e) => !e.pleamar && e.ms > ahora);
   const signo = (v) => `${v >= 0 ? '+' : ''}${num(v, 2)} m`;
   $('#mareas-resumen').innerHTML = `
-    <div class="tarjeta ancha"><div class="etq">Ahora</div><div class="valor">${signo(vAhora)}</div>
+    <div class="tarjeta ancha"><div class="etq">Ahora (modelo)</div><div class="valor">${signo(vAhora)}</div>
       <div class="extra">${subiendo ? '↑ Creciente (marea subiendo)' : '↓ Bajante (marea bajando)'}</div></div>
     <div class="tarjeta"><div class="etq">Próxima pleamar</div><div class="valor">${proxPlea ? horaLocal(proxPlea.ms) : '—'}</div>
       <div class="extra">${proxPlea ? signo(proxPlea.v) : ''}</div></div>
@@ -700,82 +794,246 @@ function renderMareas(m) {
 }
 
 // ---------- Alertas ----------
+function alertasEmergencia() {
+  const lista = [];
+  for (const e of buques.values()) {
+    const b = e.datos;
+    const em = emergencia(b);
+    const p = posicionEstimada(e);
+    const desdeMi = propio ? ` A ${num(distNM(propio, p), 2)} MN al ${grados(rumbo(propio, p))} de vos.` : '';
+    if (em) {
+      lista.push({
+        nivel: em.prueba ? 'info' : 'peligro', icono: em.prueba ? '🧪' : '🆘', mmsi: b.mmsi, activa: !em.prueba,
+        clave: `emergencia-${b.mmsi}-${em.prueba}`,
+        titulo: em.prueba ? `${em.tipo}: prueba del equipo` : em.tipo.toUpperCase(),
+        texto: `${b.nombre || `MMSI ${b.mmsi}`} en ${fmtPos(p)} (${num(distNM(ING_WHITE, p))} MN al ${grados(rumbo(ING_WHITE, p))} de Ing. White).${desdeMi}` +
+          (em.prueba ? ' Es una prueba, no una emergencia.' : ' Avisá a Prefectura: 106 o VHF canal 16.') + (senalVieja(e) ? ` Última señal ${hace(edad(e))}.` : ''),
+      });
+    } else if (b.mensajeSeguridad && b.horaMensaje && Date.now() - b.horaMensaje < 30 * 60000) {
+      lista.push({ nivel: 'aviso', icono: '📢', clave: `seguridad-${b.mmsi}-${b.horaMensaje}`,
+        titulo: `Mensaje de seguridad AIS de ${b.nombre || b.mmsi}`, texto: `«${b.mensajeSeguridad}» ${hace(Date.now() - b.horaMensaje)}.` });
+    }
+  }
+  return lista;
+}
+
 function renderAlertas() {
-  const alertasAbordaje = riesgos.map((r) => ({
-    nivel: r.cpa < Number($('#umbral-cpa').value) / 2 || r.a === propio || r.b === propio ? 'peligro' : 'aviso',
-    icono: '⚠',
-    clave: `cpa-${r.a.mmsi}-${r.b.mmsi}`,
-    titulo: r.a === propio || r.b === propio ? 'RIESGO DE ABORDAJE CON TU EMBARCACIÓN' : 'Riesgo de abordaje',
-    texto: `${r.a.nombre || r.a.mmsi} y ${r.b.nombre || r.b.mmsi}: se acercarán a ${num(r.cpa, 2)} MN dentro de ${Math.round(r.tcpaMin)} min (ahora a ${num(r.distancia, 2)} MN).`,
-    propio: r.a === propio || r.b === propio,
-  }));
-  const todas = [...alertasTiempo, ...alertasAbordaje];
-  $('#cuenta-alertas').textContent = todas.length;
+  const emergencias = alertasEmergencia();
+  const alertasAbordaje = riesgos.map((r) => {
+    const conmigo = r.a === propio || r.b === propio;
+    return {
+      nivel: r.cpa < Number($('#umbral-cpa').value) / 2 || conmigo ? 'peligro' : 'aviso',
+      icono: '⚠',
+      clave: `cpa-${r.a.mmsi}-${r.b.mmsi}`,
+      titulo: conmigo ? 'RIESGO DE ABORDAJE CON TU EMBARCACIÓN' : 'Riesgo de abordaje',
+      texto: `${nombreDe(r.a)} y ${nombreDe(r.b)}: se acercarán a ${num(r.cpa, 2)} MN dentro de ${Math.round(r.tcpaMin)} min (ahora a ${num(r.distancia, 2)} MN). ${explicarRIPA(r)}`,
+      conmigo,
+    };
+  });
+  const todas = [...emergencias, ...alertasTiempo, ...alertasAbordaje];
+  $('#cuenta-alertas').textContent = todas.filter((a) => a.nivel !== 'info').length;
   $('#lista-alertas').innerHTML = todas.length
-    ? todas.map((a) => `<li class="${a.nivel}"><span class="icono">${a.icono}</span><div><b>${esc(a.titulo)}</b><br>${esc(a.texto)}</div></li>`).join('')
-    : '<li class="vacio">Sin alertas: buen tiempo y sin riesgos de abordaje a la vista. 👍</li>';
+    ? todas.map((a) => `<li class="${a.nivel}" ${a.mmsi ? `data-mmsi="${esc(a.mmsi)}"` : ''}><span class="icono">${a.icono}</span><div><b>${esc(a.titulo)}</b><br>${esc(a.texto)}</div></li>`).join('')
+    : '<li class="vacio">Sin alertas: sin avisos de mal tiempo ni riesgos de abordaje a la vista.</li>';
+
+  // Emergencia activa: barra roja intermitente y alarma sonora hasta que se silencie
+  const activas = emergencias.filter((a) => a.activa);
+  const peligroPropio = alertasAbordaje.filter((a) => a.conmigo);
+  const barra = $('#alerta-emergencia');
+  const principal = activas[0] || peligroPropio[0];
+  barra.hidden = !principal;
+  if (principal) {
+    $('#alerta-emergencia-texto').textContent = `${principal.icono} ${principal.titulo}: ${principal.texto}`;
+    barra.dataset.mmsi = principal.mmsi || '';
+  }
+  alarma(Boolean(principal));
 
   const banner = $('#alerta-tormenta');
-  const principal = alertasTiempo.find((a) => a.nivel === 'peligro') || alertasTiempo.find((a) => a.nivel === 'aviso');
-  if (principal) {
-    banner.hidden = false;
-    banner.className = `alerta-tormenta ${principal.nivel}`;
-    banner.textContent = `${principal.icono} ${principal.titulo}: ${principal.texto}`;
-  } else {
-    banner.hidden = true;
+  const tormenta = alertasTiempo.find((a) => a.nivel === 'peligro') || alertasTiempo.find((a) => a.nivel === 'aviso');
+  banner.hidden = !tormenta;
+  if (tormenta) {
+    banner.className = `alerta-tormenta ${tormenta.nivel}`;
+    banner.textContent = `${tormenta.icono} ${tormenta.titulo}: ${tormenta.texto}`;
   }
 
-  for (const a of [...alertasTiempo.filter((x) => x.nivel === 'peligro'), ...alertasAbordaje.filter((x) => x.propio)]) {
+  for (const a of [...activas, ...alertasTiempo.filter((x) => x.nivel === 'peligro'), ...peligroPropio]) {
     if (notificadas.has(a.clave)) continue;
     notificadas.add(a.clave);
     navigator.vibrate?.([300, 150, 300, 150, 600]);
     if ('Notification' in window && Notification.permission === 'granted') {
-      try { new Notification(`${a.icono} ${a.titulo}`, { body: a.texto, tag: a.clave }); } catch { /* algunos móviles solo permiten avisos desde un service worker */ }
+      navigator.serviceWorker?.ready
+        .then((reg) => reg.showNotification(`${a.icono} ${a.titulo}`, { body: a.texto, tag: a.clave, requireInteraction: a.nivel === 'peligro' }))
+        .catch(() => { try { new Notification(`${a.icono} ${a.titulo}`, { body: a.texto, tag: a.clave }); } catch { /* sin avisos */ } });
     }
   }
 }
 $('#alerta-tormenta').addEventListener('click', () => abrirPestana('alertas'));
+$('#alerta-emergencia').addEventListener('click', (ev) => {
+  if (ev.target.id === 'btn-silenciar') return;
+  const mmsi = Number($('#alerta-emergencia').dataset.mmsi);
+  if (mmsi) irA(mmsi);
+  else abrirPestana('alertas');
+});
+$('#btn-silenciar').addEventListener('click', () => silenciarAlarma(5));
+$('#lista-alertas').addEventListener('click', (ev) => {
+  const li = ev.target.closest('li[data-mmsi]');
+  if (li) irA(Number(li.dataset.mmsi));
+});
+
+// ---------- Estado de los datos ----------
+let teselasGuardadas = null;
+async function contarTeselas() {
+  try {
+    let total = 0;
+    for (const nombre of ['teselas', 'teselas-opacas']) total += (await (await caches.open(nombre)).keys()).length;
+    teselasGuardadas = total;
+  } catch { teselasGuardadas = null; }
+}
+
+function renderEstado() {
+  const conInternet = navigator.onLine;
+  $('#conexion').hidden = conInternet;
+  const fila = (luz, texto) => `<div><span class="luz ${luz}"></span><span>${texto}</span></div>`;
+  const filas = [fila(conInternet ? 'ok' : 'mal', conInternet ? 'Con internet' : '<b>Sin internet</b>: funcionan la carta guardada, GPS, MOB, guía OMI y el último pronóstico')];
+  const { modo, fuentes = [] } = estadoFuente;
+  if (modo === 'simulacion') filas.push(fila('med', '<b>Buques simulados</b> (práctica): no son reales'));
+  else if (modo === 'sin-datos' || !fuentes.length) filas.push(fila('mal', 'AIS: sin conexión con el servidor. No se muestran buques nuevos.'));
+  for (const f of fuentes) {
+    // f.ultimo viene con el reloj del servidor: se compara con la hora del servidor en el último paquete
+    const antiguedad = f.ultimo ? estadoFuente.ahora - f.ultimo + (Date.now() - ultimoPaquete) : null;
+    const extra = f.descartados ? `, ${f.descartados} sentencias corruptas descartadas` : '';
+    filas.push(fila(f.conectado && antiguedad != null && antiguedad < 120000 ? 'ok' : 'mal',
+      `${esc(f.nombre)}: ${antiguedad != null ? `último dato ${hace(antiguedad)}` : 'sin datos todavía'} (${f.mensajes} mensajes${extra})`));
+  }
+  if (tiempoGuardado) {
+    filas.push(fila(tiempoSinConexion ? 'med' : 'ok', `Pronóstico: ${tiempoSinConexion ? 'guardado' : 'actualizado'} ${hace(Date.now() - tiempoGuardado)}`));
+  } else {
+    filas.push(fila('mal', 'Pronóstico: sin datos'));
+  }
+  filas.push(propio
+    ? fila(propio.precisionM <= 20 ? 'ok' : 'med', `GPS: ±${Math.round(propio.precisionM)} m, ${hace(Date.now() - propio.hora)}`)
+    : fila('med', 'GPS: apagado (tocá 📍 Mi posición)'));
+  if (teselasGuardadas != null) filas.push(fila(teselasGuardadas ? 'ok' : 'med', `Carta sin internet: ${teselasGuardadas} teselas guardadas + costa incluida`));
+  $('#estado-datos').innerHTML = filas.join('');
+}
+window.addEventListener('online', () => { renderEstado(); cargarTiempo(); });
+window.addEventListener('offline', renderEstado);
+
+// Guarda las teselas de la zona visible. Máximo 250 por pedido, como pide la política de uso de OpenStreetMap
+$('#btn-guardar-zona').addEventListener('click', async () => {
+  const estado = $('#guardar-zona-estado');
+  if (!navigator.onLine) { estado.textContent = 'Necesitás internet para guardar la zona.'; return; }
+  const z0 = Math.round(map.getZoom());
+  const urls = [];
+  for (let z = z0; z <= Math.min(z0 + 2, 16); z++) {
+    const b = map.getPixelBounds(map.getCenter(), z);
+    const min = b.min.divideBy(256).floor();
+    const max = b.max.divideBy(256).floor();
+    for (let x = min.x; x <= max.x; x++) {
+      for (let y = min.y; y <= max.y; y++) {
+        urls.push([`https://tile.openstreetmap.org/${z}/${x}/${y}.png`, 'cors'], [`https://tiles.openseamap.org/seamark/${z}/${x}/${y}.png`, 'no-cors']);
+      }
+    }
+  }
+  const lote = urls.slice(0, 500); // 250 de la carta + 250 de balizas
+  let hechas = 0;
+  let fallas = 0;
+  $('#btn-guardar-zona').disabled = true;
+  const trabajar = async () => {
+    while (lote.length) {
+      const [url, mode] = lote.shift();
+      try { await fetch(url, { mode }); hechas++; } catch { fallas++; }
+      estado.textContent = `Guardando… ${hechas + fallas} de ${Math.min(urls.length, 500)}`;
+    }
+  };
+  await Promise.all([trabajar(), trabajar()]);
+  $('#btn-guardar-zona').disabled = false;
+  estado.textContent = `Listo: ${hechas} teselas guardadas${fallas ? `, ${fallas} fallaron` : ''}${urls.length > 500 ? '. La zona era grande: acercate más y guardá por partes.' : '.'}`;
+  contarTeselas().then(renderEstado);
+});
 
 // ---------- Mi posición (GPS) ----------
 let marcadorPropio = null;
 let circuloPrecision = null;
 let vigilancia = null;
-$('#btn-gps').addEventListener('click', () => {
-  const boton = $('#btn-gps');
-  if (vigilancia != null) {
-    navigator.geolocation.clearWatch(vigilancia);
-    vigilancia = null;
-    propio = null;
-    marcadorPropio?.remove();
-    circuloPrecision?.remove();
-    marcadorPropio = circuloPrecision = null;
-    boton.classList.remove('activo');
-    return;
+let primeraPosicion = true;
+
+function actualizarPropio(pos) {
+  const c = pos.coords;
+  const nuevo = { lat: c.latitude, lon: c.longitude };
+  // Un GPS que salta a una posición imposible (más de 60 nudos) se ignora
+  if (propio && distNM(propio, nuevo) > 0.5 && distNM(propio, nuevo) / Math.max((pos.timestamp - propio.hora) / 3600000, 1 / 3600) > 60) return;
+  propio = { mmsi: 'PROPIO', nombre: 'Mi posición', ...nuevo, hora: pos.timestamp, precisionM: c.accuracy,
+    sog: c.speed != null ? c.speed * 1.943844 : null, cog: c.heading != null && !Number.isNaN(c.heading) ? c.heading : null };
+  const ll = [c.latitude, c.longitude];
+  if (!marcadorPropio) {
+    marcadorPropio = L.marker(ll, { zIndexOffset: 1500, icon: L.divIcon({ className: 'propio', iconSize: [22, 22],
+      html: '<svg width="22" height="22" viewBox="-11 -11 22 22"><circle r="9" fill="#3fb6ff" fill-opacity="0.3" stroke="#3fb6ff" stroke-width="2"/><circle r="4" fill="#fff" stroke="#3fb6ff" stroke-width="2"/></svg>' }) })
+      .bindTooltip('Mi posición').addTo(map);
+    circuloPrecision = L.circle(ll, { radius: c.accuracy, color: '#3fb6ff', weight: 1, fillOpacity: 0.08 }).addTo(map);
   }
-  if (!navigator.geolocation) return alert('Este dispositivo no tiene GPS disponible.');
-  boton.classList.add('activo');
-  let primera = true;
-  vigilancia = navigator.geolocation.watchPosition((pos) => {
-    const c = pos.coords;
-    propio = { mmsi: 'PROPIO', nombre: 'Mi posición', lat: c.latitude, lon: c.longitude,
-      sog: c.speed != null ? c.speed * 1.943844 : null, cog: c.heading != null && !Number.isNaN(c.heading) ? c.heading : null };
-    const ll = [c.latitude, c.longitude];
-    if (!marcadorPropio) {
-      marcadorPropio = L.marker(ll, { icon: L.divIcon({ className: 'propio', iconSize: [22, 22],
-        html: '<svg width="22" height="22" viewBox="-11 -11 22 22"><circle r="9" fill="#3fb6ff" fill-opacity="0.3" stroke="#3fb6ff" stroke-width="2"/><circle r="4" fill="#fff" stroke="#3fb6ff" stroke-width="2"/></svg>' }) })
-        .bindTooltip('Mi posición').addTo(map);
-      circuloPrecision = L.circle(ll, { radius: c.accuracy, color: '#3fb6ff', weight: 1, fillOpacity: 0.08 }).addTo(map);
-    }
-    marcadorPropio.setLatLng(ll);
-    circuloPrecision.setLatLng(ll).setRadius(c.accuracy);
-    marcadorPropio.setTooltipContent(`Mi posición · ${fmtPos(propio)}${propio.sog != null ? ` · ${num(propio.sog)} kn ${grados(propio.cog)}` : ''}`);
-    if (primera) { map.setView(ll, Math.max(map.getZoom(), 12)); primera = false; }
-  }, (err) => {
+  marcadorPropio.setLatLng(ll);
+  circuloPrecision.setLatLng(ll).setRadius(c.accuracy);
+  marcadorPropio.setTooltipContent(`Mi posición · ${fmtPos(propio)} · ±${Math.round(c.accuracy)} m${propio.sog != null ? ` · ${num(propio.sog)} kn ${grados(propio.cog)}` : ''}`);
+  if (primeraPosicion) { map.setView(ll, Math.max(map.getZoom(), 12)); primeraPosicion = false; }
+  socorro.generar();
+}
+
+function encenderGPS() {
+  if (vigilancia != null || !navigator.geolocation) return;
+  $('#btn-gps').classList.add('activo');
+  vigilancia = navigator.geolocation.watchPosition(actualizarPropio, (err) => {
     alert(`No se pudo obtener tu posición: ${err.message}`);
-    boton.classList.remove('activo');
-    vigilancia = null;
+    apagarGPS();
   }, { enableHighAccuracy: true, maximumAge: 5000 });
+}
+
+function apagarGPS() {
+  if (vigilancia != null) navigator.geolocation.clearWatch(vigilancia);
+  vigilancia = null;
+  propio = null;
+  primeraPosicion = true;
+  marcadorPropio?.remove();
+  circuloPrecision?.remove();
+  marcadorPropio = circuloPrecision = null;
+  $('#btn-gps').classList.remove('activo');
+  socorro.generar();
+}
+
+$('#btn-gps').addEventListener('click', () => {
+  if (!navigator.geolocation) { alert('Este dispositivo no tiene GPS disponible.'); return; }
+  if (vigilancia != null) apagarGPS();
+  else encenderGPS();
 });
+
+// Para el MOB: una posición en pocos segundos, aunque el GPS estuviera apagado
+function obtenerPosicionRapida() {
+  return new Promise((resolver) => {
+    if (!navigator.geolocation) return resolver(null);
+    navigator.geolocation.getCurrentPosition((pos) => {
+      actualizarPropio(pos);
+      encenderGPS();
+      resolver({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+    }, () => resolver(null), { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 });
+  });
+}
+
+// ---------- Hombre al agua y mensajes de socorro ----------
+const mob = crearMOB({ map, obtenerPropio: () => propio, obtenerPosicionRapida });
+const socorro = crearGeneradorSocorro({
+  obtenerPropio: () => propio,
+  obtenerMOB: () => mob.actual(),
+  referencia: { punto: ING_WHITE, nombre: 'PUERTO INGENIERO WHITE' },
+});
+$('#btn-mob').addEventListener('click', () => mob.marcar());
+$('#mob-fin').addEventListener('click', () => mob.terminar());
+$('#mob-mayday').addEventListener('click', () => {
+  $('#sos-naturaleza').value = 'mob';
+  document.querySelector('input[name="sos-tipo"][value="mayday"]').checked = true;
+  socorro.generar();
+  abrirPestana('sos');
+});
+mob.actualizar();
 
 // ---------- Regla: distancia y rumbo ----------
 let regla = null;
@@ -819,6 +1077,7 @@ function abrirPestana(nombre) {
   document.querySelectorAll('.pestanas button').forEach((b) => b.classList.toggle('activa', b.dataset.pestana === nombre));
   document.querySelectorAll('.vista').forEach((v) => v.classList.toggle('activa', v.id === `vista-${nombre}`));
   $('#panel').classList.add('abierto');
+  if (nombre === 'alertas') contarTeselas().then(renderEstado);
 }
 document.querySelectorAll('.pestanas button').forEach((b) => b.addEventListener('click', () => abrirPestana(b.dataset.pestana)));
 $('#btn-panel').addEventListener('click', () => $('#panel').classList.toggle('abierto'));
@@ -831,20 +1090,31 @@ $('#btn-noche').addEventListener('click', () => {
 if (leer('carta-noche') === '1') { document.body.classList.add('noche'); $('#btn-noche').classList.add('activo'); }
 
 $('#btn-avisos').addEventListener('click', async () => {
-  if (!('Notification' in window)) return alert('Este navegador no permite avisos. Las alertas igual aparecen en la barra roja y en la pestaña ⚠ Alertas.');
+  if (!('Notification' in window)) { alert('Este navegador no permite avisos. Las alertas igual aparecen en las barras de arriba, con sonido, y en la pestaña ⚠ Alertas.'); return; }
   const permiso = await Notification.requestPermission();
   $('#btn-avisos').classList.toggle('activo', permiso === 'granted');
-  if (permiso === 'granted') new Notification('⚓ Avisos activados', { body: 'Te avisaré si viene temporal, tormenta o riesgo de abordaje mientras la carta esté abierta.' });
+  if (permiso === 'granted') {
+    navigator.serviceWorker?.ready
+      .then((reg) => reg.showNotification('⚓ Avisos activados', { body: 'Te aviso si viene temporal, tormenta, una emergencia AIS o riesgo de abordaje mientras la carta esté abierta.' }))
+      .catch(() => {});
+  }
 });
 if ('Notification' in window && Notification.permission === 'granted') $('#btn-avisos').classList.add('activo');
 
 function reloj() {
   const ahora = new Date();
-  const utc = ahora.toISOString().slice(11, 16);
-  $('#reloj').textContent = `${horaLocal(ahora)} hora local · ${utc} UTC`;
+  $('#reloj').textContent = `${horaLocal(ahora)} hora local · ${ahora.toISOString().slice(11, 16)} UTC`;
 }
 setInterval(reloj, 1000);
 reloj();
+// Cada 5 s se reevalúa la edad de las señales, aunque no lleguen datos nuevos
+setInterval(() => { refrescarIconos(); renderEstado(); if (!ultimoPaquete || Date.now() - ultimoPaquete > 5000) { calcularRiesgos(); renderLista(); renderAlertas(); } }, 5000);
+
+// La página queda guardada en el dispositivo para abrirla sin internet
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').then(() => contarTeselas().then(renderEstado)).catch(() => {});
+}
 
 conectar();
 cargarTiempo();
+renderEstado();
