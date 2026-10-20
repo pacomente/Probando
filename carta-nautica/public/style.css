@@ -258,7 +258,7 @@ body.noche #mapa { background: #000; }
   }
   .panel.abierto { transform: none; }
   .coordenadas { bottom: 66px; font-size: 11px; }
-  .alerta-tormenta { font-size: 12px; padding: 6px 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .alerta-tormenta { font-size: 12px; line-height: 1.4; padding: 6px 10px; max-height: calc(2.8em + 12px); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .alerta-tormenta[hidden] { display: none; }
   .ficha { top: auto; bottom: 96px; left: 10px; max-width: calc(100% - 20px); max-height: 60%; overflow-y: auto; }
 }

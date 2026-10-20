@@ -16,7 +16,8 @@ const MINUTOS_VECTOR = 6;
 const TCPA_MAX_MIN = 20;
 const ESTIMA_MAX_MS = 3 * 60000; // más allá, no se adivina: se muestra la última posición recibida
 const SENAL_VIEJA_MS = 6 * 60000; // sin señal hace más de esto: posición poco fiable
-const PRACTICA = new URLSearchParams(location.search).has('practica');
+// Modo práctica: con ?practica en la dirección o en una página de demostración (<meta name="trappi-modo" content="practica">)
+const PRACTICA = new URLSearchParams(location.search).has('practica') || Boolean(document.querySelector('meta[name="trappi-modo"][content="practica"]'));
 
 // Posiciones aproximadas, solo como referencia en la carta
 const PUERTOS = [
@@ -536,6 +537,7 @@ function simulacionLocal() {
 let alertasTiempo = [];
 let tiempoGuardado = null; // hora del pronóstico en uso
 let tiempoSinConexion = false;
+let tiempoEjemplo = false;
 const notificadas = new Set();
 
 const beaufort = (kn) => LIMITES_BEAUFORT.filter((l) => kn >= l).length;
@@ -605,8 +607,17 @@ async function cargarTiempo() {
     malla: viento.status === 'fulfilled' ? [].concat(viento.value) : null,
     guardado: Date.now(),
   };
+  // En la demo sin conexión se usa un pronóstico de EJEMPLO, marcado como tal
+  tiempoEjemplo = false;
+  if (PRACTICA && !datos.pron) {
+    const { pronosticoEjemplo } = await import('./tiempo-ejemplo.js');
+    datos = { ...pronosticoEjemplo(), guardado: Date.now() };
+    tiempoEjemplo = true;
+  }
   tiempoSinConexion = !datos.pron;
-  if (datos.pron && datos.mar) {
+  if (tiempoEjemplo) {
+    // no se guarda: no es un pronóstico real
+  } else if (datos.pron && datos.mar) {
     guardar('carta-tiempo', JSON.stringify(datos));
   } else {
     // Sin conexión: se usa el último pronóstico guardado (cubre hasta 4 días)
@@ -625,8 +636,10 @@ async function cargarTiempo() {
   if (datos.malla) renderVientoMapa(malla, datos.malla); // el viento "actual" guardado no se muestra: ya no sería actual
 
   const origen = $('#tiempo-origen');
-  origen.hidden = !tiempoSinConexion || !f;
-  origen.textContent = `⚠ Sin conexión: pronóstico guardado ${hace(Date.now() - tiempoGuardado)} (${diaHora(tiempoGuardado)}). Puede haber cambiado.`;
+  origen.hidden = !(tiempoSinConexion || tiempoEjemplo) || !f;
+  origen.textContent = tiempoEjemplo
+    ? '⚠ DEMOSTRACIÓN: pronóstico de ejemplo con un temporal, para mostrar las alertas. No es el tiempo real.'
+    : `⚠ Sin conexión: pronóstico guardado ${hace(Date.now() - tiempoGuardado)} (${diaHora(tiempoGuardado)}). Puede haber cambiado.`;
 
   alertasTiempo = f ? analizarTiempo(f, m) : [];
   renderAlertas();
@@ -746,7 +759,8 @@ function analizarTiempo(f, m) {
         texto: `Olas de ${num(olaMax.h)} m en la boca de la ría (${diaHora(m.ms[olaMax.k])}).` });
     }
   }
-  if (tiempoSinConexion) for (const a of alertas) a.texto += ' (Pronóstico guardado, sin conexión.)';
+  if (tiempoEjemplo) for (const a of alertas) a.texto += ' (EJEMPLO de demostración, no es el tiempo real.)';
+  else if (tiempoSinConexion) for (const a of alertas) a.texto += ' (Pronóstico guardado, sin conexión.)';
   return alertas;
 }
 

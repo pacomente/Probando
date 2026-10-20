@@ -102,8 +102,18 @@ export function crearMOB({ map, obtenerPropio, obtenerPosicionRapida, alAvisar =
     actualizar();
   }
 
+  // Se confirma tocando dos veces (sin ventanas del navegador, que algunos equipos bloquean)
+  let confirmando = null;
   function terminar() {
-    if (!confirm('¿La persona fue recuperada? Se borra la marca de hombre al agua.')) return;
+    const boton = $('#mob-fin');
+    if (!confirmando) {
+      boton.textContent = '¿Recuperada? Tocá de nuevo';
+      confirmando = setTimeout(() => { confirmando = null; boton.textContent = '✓ Recuperada'; }, 4000);
+      return;
+    }
+    clearTimeout(confirmando);
+    confirmando = null;
+    boton.textContent = '✓ Recuperada';
     mob = null;
     guardar('carta-mob', '');
     alAvisar('FIN');
