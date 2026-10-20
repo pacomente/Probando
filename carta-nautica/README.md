@@ -1,123 +1,145 @@
-# ⚓ Carta Náutica · Bahía Blanca
+# Trappi Tecnología · Carta náutica y monitoreo de flota
 
-Carta náutica en vivo de la ría de Bahía Blanca, pensada para estudiantes de marinería:
-buques moviéndose en tiempo real, avisos de tormenta, viento, olas, mareas, alertas de abordaje con las reglas
-del RIPA, emergencias (hombre al agua, radiobalizas AIS-SART, MAYDAY) y guía de la OMI. **Funciona sin internet.**
+Sistema de **carta náutica en tiempo real y monitoreo de flota pesquera**. Cada barco ve el tráfico, el tiempo y las
+emergencias a su alrededor, aun sin internet. La oficina en tierra ve toda su flota en vivo por Starlink.
 
-> **No apta para navegación.** Es una herramienta de estudio y seguimiento. Para navegar usá las cartas
-> oficiales del Servicio de Hidrografía Naval (SHN) y los avisos a los navegantes de Prefectura.
+> Sistema de apoyo y monitoreo. **No reemplaza** las cartas oficiales del Servicio de Hidrografía Naval, los equipos de
+> navegación del buque, el sistema de monitoreo satelital exigido por la autoridad pesquera ni los avisos de Prefectura.
 
-## Qué tiene
-
-| Función | Qué hace |
-|---|---|
-| 🚢 **Buques en tiempo real (AIS)** | Posición, rumbo, velocidad, destino, ETA, eslora, calado y bandera de cada buque. Se mueven de forma continua (estima entre señales) y dejan **estela** y **vector de 6 minutos**, como en un ECDIS. |
-| ⚠ **Riesgo de abordaje (CPA/TCPA)** | Calcula a qué distancia se van a cruzar dos buques y en cuántos minutos. Si es menos del límite (0,2 / 0,5 / 1 MN) dibuja una línea roja y avisa. |
-| 🌪 **Avisos de tormenta** | Barra roja arriba si en las próximas 24 h viene **temporal** (Fuerza 8 o más), **tormenta eléctrica**, **caída rápida de presión**, **mar gruesa** o **niebla**. Detecta viento del S-SO (posible **pampero**) y del SE (**sudestada**). |
-| 🔔 **Avisos al teléfono** | Con el botón Avisos te notifica y hace vibrar el teléfono si llega un temporal o si un buque va a pasar peligrosamente cerca de vos. |
-| 🌬 **Viento en la ría** | Flechas animadas en 9 puntos de la ría con nudos y ráfagas, coloreadas según la escala Beaufort. Pronóstico de 48 h con fuerza Beaufort y olas. |
-| 🌊 **Mareas** | Curva de las próximas 42 h con próxima pleamar y bajamar. |
-| 🗺 **Capas** | Carta (OpenStreetMap), satélite u oscuro, más **balizas, boyas y faros de OpenSeaMap**, puertos (Ing. White, Galván, Rosales, Puerto Belgrano, Cuatreros, Prefectura) y el Canal Principal. |
-| 📏 **Regla** | Tocá puntos en la carta: da distancia en millas, rumbo verdadero y cuánto tardás a 6 y a 10 nudos. |
-| 📍 **Mi posición** | Usa el GPS del teléfono, te muestra en la carta y calcula el riesgo de abordaje con los demás buques. |
-| 🌙 **Modo noche** | Todo en rojo para no perder la visión nocturna en el puente. |
-| 🆘 **Hombre al agua (MOB)** | Un toque marca la posición de la caída con el GPS, cuenta el tiempo y da **rumbo y distancia para volver**. Incluye la maniobra Williamson y qué hacer. Queda guardado aunque se cierre la página. |
-| 🛟 **Radiobalizas AIS** | Detecta **AIS-SART** (MMSI 970…), **MOB AIS** (972…) y **EPIRB-AIS** (974…): barra roja intermitente, **alarma sonora**, vibración y aviso con la posición. Distingue las pruebas de equipo de las emergencias reales. |
-| 📻 **MAYDAY listo para leer** | Arma el mensaje **MAYDAY / PAN-PAN / SÉCURITÉ** con el formato de la OMI (SMCP), en español con las frases en inglés, y pone tu posición del GPS en grados y minutos. Botón para llamar a Prefectura (106). |
-| 📘 **Guía OMI** | Canales y equipos del SMSSM (GMDSS), señales de socorro (RIPA Anexo IV), reglas de rumbo y gobierno, señales fónicas con niebla, balizamiento IALA B, alfabeto fonético y escala Beaufort. |
-| ⚖ **Reglas del RIPA en cada alerta** | Cada riesgo de abordaje dice qué situación es (alcance, vuelta encontrada, cruce o jerarquía de la Regla 18) y **quién debe maniobrar**. |
-| 🧭 **Coordenadas náuticas** | Latitud y longitud en grados y minutos, y distancia y rumbo desde Ingeniero White. |
-
-## Confiabilidad: qué hace para no mostrar datos falsos
-
-- **Nunca inventa buques.** Si no llegan datos AIS, dice **SIN DATOS AIS** y no muestra nada. Los buques de práctica
-  solo aparecen si el servidor no tiene ninguna fuente configurada (dice **SIMULACIÓN**) o si abrís la página con `?practica`.
-- **Señal vieja = transparente.** Un buque sin señal hace más de 6 minutos se ve transparente y con aviso. Se deja de
-  calcular su riesgo de abordaje, porque su posición ya no es fiable.
-- **Estima limitada.** Entre señales, la posición se adelanta según rumbo y velocidad durante 3 minutos como máximo.
-  Pasado ese tiempo se muestra la última posición recibida.
-- **Datos imposibles descartados.** Una posición que exigiría navegar a más de 60 nudos se ignora, porque casi
-  siempre es un error del GPS o del AIS. Las sentencias NMEA con checksum inválido también se descartan.
-- **Estado de los datos** (pestaña ⚠ Alertas): muestra cada fuente con la antigüedad del último dato, el pronóstico,
-  el GPS con su precisión y la carta guardada.
-- **Lo aproximado está marcado como aproximado**: puertos y Canal Principal. El canal viene apagado: guiate por las
-  boyas reales de OpenSeaMap y por la carta del SHN.
-
-## Sin internet
-
-| Funciona sin internet | Cómo |
-|---|---|
-| La página completa | Queda guardada en el dispositivo la primera vez que la abrís (se puede **instalar como app**). |
-| La costa y las islas de la ría | Vienen incluidas (datos de OpenStreetMap), siempre visibles debajo del mapa. |
-| El mapa detallado y las boyas | Se guardan las zonas que mirás. Antes de salir, recorré la ría con internet o usá **💾 Guardar la zona visible**. |
-| GPS, MOB, regla, MAYDAY y guía OMI | No necesitan red. |
-| Pronóstico, avisos de tormenta y mareas | Se usa el último pronóstico guardado (cubre hasta 4 días), marcado como guardado. |
-| **Buques AIS** | Con un **receptor AIS a bordo** conectado a la compu donde corre el servidor (ver abajo). |
-
-### Receptor AIS a bordo (sin internet)
-
-Un receptor AIS (por ejemplo dAISy, o una antena VHF con un dongle RTL-SDR y AIS-catcher) recibe directamente las
-señales de los buques cercanos, unas 20 a 40 millas según la antena. Configurá el receptor para que mande NMEA por la red
-y poné en `.env`:
+## Cómo funciona
 
 ```
-AIS_UDP_PORT=10110          # si el receptor envía por UDP
-AIS_TCP=192.168.1.50:10110  # o si sirve NMEA por TCP
+        BARCO 1                                BARCO 2                     OFICINA EN TIERRA
+ ┌──────────────────────┐              ┌──────────────────────┐        ┌──────────────────────┐
+ │ GPS ─┐               │              │                      │        │  Navegador web       │
+ │ AIS ─┼─► Trappi      │   Starlink   │      Trappi          │        │  (usuario y clave)   │
+ │      │   a bordo     │◄────────────►│      a bordo         │        │  Flota en vivo,      │
+ │ USB/ │   (PC puente) │   HTTPS      │                      │        │  alertas, recorridos │
+ │ red  │               │      │       └──────────▲───────────┘        └──────────▲───────────┘
+ └──────────────────────┘      │                  │                               │
+                               ▼                  │                               │
+                      ┌──────────────────────────────────────────────────────────────┐
+                      │                     TRAPPI CENTRAL (nube)                      │
+                      │  Cuentas por empresa · posiciones · historial · alertas SOS   │
+                      └──────────────────────────────────────────────────────────────┘
 ```
 
-Se pueden usar al mismo tiempo que aisstream.io: con internet suma la cobertura de tierra, y sin internet sigue el receptor.
+- **Trappi a bordo** se instala en la PC del puente. Lee el GPS y el AIS del barco (por USB/serie o por la red),
+  muestra la carta **sin necesidad de internet** y, cuando hay Starlink, envía la posición a la central cada minuto.
+- **Trappi Central** corre en un servidor en la nube. Reúne los barcos de cada empresa y se los muestra a la oficina y a
+  los demás barcos de **la misma empresa**. **Ninguna empresa ve la flota de otra**: la posición de los caladeros es
+  información sensible.
+- **Entre barcos sin internet** se ven por AIS de radio, como siempre, a unas 20 a 40 millas. **Con internet** se ven por
+  la central, a cualquier distancia.
+- Todas las conexiones salen del barco hacia la central (HTTPS). Esto funciona con Starlink, que no acepta conexiones entrantes.
 
-## Puesta en marcha
+## Funciones
 
-Necesitás [Node.js](https://nodejs.org) 22 o superior. No hace falta `npm install`: no tiene dependencias.
+### En el barco (Trappi a bordo)
+
+| | |
+|---|---|
+| 🚢 **Tráfico AIS** | Buques cercanos con rumbo, velocidad, destino, estela y vector de 6 minutos, moviéndose de forma continua. |
+| 🟣 **Flota de la empresa** | Los demás barcos de la empresa resaltados, a cualquier distancia (vía central). |
+| ⚠ **Riesgo de abordaje** | CPA/TCPA con la situación del RIPA (alcance, vuelta encontrada, cruce, Regla 18) y quién debe maniobrar. |
+| 🆘 **Hombre al agua** | Un toque marca la posición con el GPS del barco, da rumbo y distancia de vuelta y **avisa a la oficina y a la flota**. |
+| 📻 **MAYDAY / PAN-PAN** | Mensaje armado con el formato de la OMI y la posición del GPS, listo para leer por VHF y para enviar a la oficina. |
+| 🛟 **Radiobalizas AIS** | Alarma sonora y visual ante AIS-SART, MOB AIS o EPIRB-AIS activos. |
+| 🌪 **Avisos de tormenta** | Temporal, tormenta eléctrica, caída de presión, mar gruesa y niebla en las próximas 24 h. |
+| 🌊 **Mareas y viento** | Curva de marea, viento en la zona y pronóstico de 48 h. |
+| 📘 **Guía OMI** | SMSSM, señales de socorro, reglas del RIPA, señales con niebla, balizamiento IALA B y Beaufort. |
+| 📴 **Sin internet** | Funcionan la carta, la costa, el GPS, el AIS del barco, el MOB, el MAYDAY y el último pronóstico. Las posiciones se guardan y se envían al volver la conexión. |
+
+### En la oficina (Trappi Central)
+
+| | |
+|---|---|
+| 🗺 **Flota en vivo** | Todos los barcos de la empresa en el mapa, con la antigüedad de cada posición. |
+| 🚨 **Alertas SOS** | Hombre al agua, MAYDAY o PAN-PAN de cualquier barco: alarma sonora, barra roja y notificación, con la posición del evento. |
+| 🕑 **Recorridos** | Recorrido de las últimas 24 h de cada barco y millas navegadas. |
+| 🔐 **Acceso privado** | Usuario y contraseña por empresa; cada barco con su propia clave. |
+
+## Confiabilidad
+
+- **Nunca muestra datos inventados.** Sin datos dice **SIN DATOS AIS**. Los buques de práctica solo aparecen si no hay
+  ninguna fuente configurada, y se ven marcados como **SIMULACIÓN**.
+- **Posiciones viejas marcadas.** Un buque sin señal hace más de 6 minutos se ve transparente y sale del cálculo de abordaje.
+  La estima entre señales dura 3 minutos como máximo.
+- **Datos corruptos descartados.** Se descartan las sentencias NMEA con checksum inválido y las posiciones imposibles
+  (más de 60 nudos), tanto a bordo como en la central.
+- **Nada se pierde con los cortes.** A bordo, posiciones y alertas se guardan en disco hasta que vuelve la conexión.
+  Las alertas salen primero.
+- **Estado visible.** La pestaña ⚠ Alertas muestra cada fuente con la antigüedad del último dato, la conexión con la
+  central y los datos pendientes de envío.
+
+## Instalación a bordo (Windows)
+
+1. Instalar **Node.js 22 LTS** desde <https://nodejs.org>.
+2. Copiar la carpeta `carta-nautica` a la PC, por ejemplo en `C:\Trappi`.
+3. Doble clic en **`Trappi-a-bordo.bat`**. La primera vez instala los componentes y abre la configuración (`.env`).
+4. Completar el `.env`:
+   ```
+   TRAPPI_CENTRAL_URL=https://central.tu-dominio.com
+   TRAPPI_TOKEN=trp_...            # clave del barco, la da la central al registrarlo
+   SERIAL=COM3:4800                # GPS por USB (ver el número de puerto en el Administrador de dispositivos)
+   ```
+   Para el AIS por USB se suma con coma: `SERIAL=COM3:4800,COM4:38400`. Si los equipos salen por la red del barco
+   (multiplexor NMEA), usar `AIS_UDP_PORT` o `AIS_TCP`.
+5. Opcional: **`instalar-inicio-automatico.bat`** para que arranque solo al encender la PC.
+
+La carta se abre en el navegador en <http://localhost:3001>. Con `HOST=0.0.0.0` también se puede ver desde otras
+pantallas o tablets de la red del barco.
+
+## Instalación de la central (servidor)
+
+En un servidor Linux con Node.js 22 y un dominio propio:
 
 ```bash
 cd carta-nautica
-npm start
+cp .env.central.example .env.central
+node central.js empresa "Pesquera del Sur"                    # muestra el código de la empresa
+node central.js usuario <código> oficina                      # usuario de oficina (muestra la contraseña)
+node central.js buque <código> "Don Vicente" 701000201        # muestra el TRAPPI_TOKEN del barco
+node central.js                                               # arranca (puerto 3100)
 ```
 
-Abrí <http://localhost:3001>. Sin clave AIS arranca en **modo simulación**, con buques de práctica
-(los que terminan en "(SIM)") que entran y salen por el Canal Principal.
+Publicarla **siempre con HTTPS**. Por ejemplo con [Caddy](https://caddyserver.com), que obtiene el certificado solo:
 
-### Ver los buques reales
+```
+central.tu-dominio.com {
+    reverse_proxy localhost:3100
+}
+```
 
-1. Creá una cuenta gratis en <https://aisstream.io> y generá una **API Key**.
-2. Copiá `.env.example` como `.env` y pegá la clave:
-   ```
-   AISSTREAM_API_KEY=tu_clave
-   ```
-3. Reiniciá con `npm start`. Arriba va a decir **AIS EN VIVO**.
+Los datos quedan en `datos-central/`: `cuentas.json` (contraseñas y claves guardadas cifradas con hash), el historial por
+barco y día, y `alertas.jsonl`. Hay que hacer **copias de seguridad** de esa carpeta.
 
-La clave queda en el servidor y nunca se manda al navegador. La cobertura AIS en la ría depende de las
-estaciones receptoras en tierra: en algunos momentos puede haber pocos buques o señales atrasadas.
+## Antes de comercializar
 
-### En GitHub Codespaces
-
-Abrí el Codespace, en la terminal ejecutá `cd carta-nautica && npm start` y abrí el puerto **3001**
-desde la pestaña **Ports**. Para la clave AIS, creá el archivo `.env` como arriba.
-
-## De dónde salen los datos
-
-- **Buques**: [aisstream.io](https://aisstream.io) (AIS terrestre, gratis con registro).
-- **Viento, presión, olas y marea**: [Open-Meteo](https://open-meteo.com) (gratis, sin clave). La marea es la
-  de un modelo global en la boca de la ría: **dentro de la ría la amplitud es mucho mayor**. Para la hora y la altura
-  reales en Ingeniero White usá las [tablas de marea del SHN](https://www.hidro.gov.ar/oceanografia/tmareas/form_tmareas.asp).
-- **Carta**: OpenStreetMap y [OpenSeaMap](https://openseamap.org) (señalización marítima cargada por voluntarios).
-
-Las posiciones de los puertos y el trazado del Canal Principal son aproximados.
-
-La guía OMI es un resumen de estudio de los convenios (RIPA/COLREG 72, SOLAS, SMSSM, SMCP): no reemplaza los textos
-oficiales ni las normas de Prefectura Naval Argentina.
+- **Mapas:** los servidores gratuitos de OpenStreetMap, Esri y CARTO no permiten uso comercial intensivo. Hay que
+  contratar un proveedor de mapas (MapTiler, Stadia, etc.) o un servidor propio y cambiar las direcciones en `public/app.js`.
+- **AIS:** revisar las condiciones de uso comercial de aisstream.io. Para ver barcos lejos de la costa (caladeros)
+  hace falta **AIS satelital** (Spire, ORBCOMM…), que es un servicio pago.
+- **Pronóstico:** Open-Meteo pide una suscripción para uso comercial.
+- **Cartas oficiales:** las cartas electrónicas del SHN se licencian aparte.
+- **Monitoreo obligatorio:** los pesqueros ya llevan el sistema de posicionamiento satelital que exige la autoridad.
+  Trappi se ofrece como **complemento de gestión y seguridad**, no como reemplazo.
+- **Datos de clientes:** las posiciones de la flota son información confidencial de cada empresa. Conviene un contrato
+  que diga dónde se guardan, quién accede y por cuánto tiempo.
 
 ## Archivos
 
-- `server.js`: servidor web. Recibe el AIS de aisstream.io (o simula) y se lo manda a la página cada 2 segundos.
-- `ais-nmea.js`: decodificador de sentencias AIS NMEA (!AIVDM) para el receptor a bordo.
-- `public/app.js`: la carta (mapa, buques, tiempo, mareas, alertas, regla, GPS, estado de los datos).
-- `public/emergencia.js`: radiobalizas AIS, alarma, hombre al agua y mensajes MAYDAY / PAN-PAN / SÉCURITÉ.
-- `public/navegacion.js`: cálculos de navegación (distancia, rumbo, estima, CPA/TCPA) y situaciones del RIPA. Buen material de estudio.
-- `public/sw.js`: guarda la página y el mapa en el dispositivo para usarlos sin internet.
-- `public/costa.js`: costa e islas de la ría (© OpenStreetMap, ODbL, vía @geo-maps/earth-lands-1m).
-- `public/simulacion.js`: el tráfico de práctica.
-- `public/registro.js`: junta los mensajes AIS de cada buque y guarda su estela.
-- `public/vendor/leaflet`: librería de mapas [Leaflet](https://leafletjs.com) 1.9.4 (licencia BSD-2).
+| Archivo | Para qué |
+|---|---|
+| `server.js` | Trappi a bordo: lee GPS/AIS, sirve la carta, se comunica con la central. |
+| `central.js` | Trappi Central: cuentas, flota, historial, alertas y administración. |
+| `enlace-central.js` | Envío de posiciones y alertas con cola en disco para los cortes de conexión. |
+| `ais-nmea.js` | Lectura de sentencias NMEA: AIS (!AIVDM/!AIVDO) y GPS ($GPRMC). |
+| `comun.js` | Código compartido por los dos servidores. |
+| `public/` | La carta (web): `app.js`, `emergencia.js`, `navegacion.js` (cálculos y RIPA), `sw.js` (uso sin internet), `login.html` (oficina). |
+| `Trappi-a-bordo.bat` | Arranque en Windows. |
+
+Datos de terceros: costa © colaboradores de OpenStreetMap (ODbL), señalización © OpenSeaMap, mapas © OpenStreetMap,
+Esri y CARTO, pronóstico Open-Meteo, librería de mapas Leaflet (BSD-2).
+
+© Trappi Tecnología. Todos los derechos reservados.

@@ -12,7 +12,7 @@
   "forwardPorts": [3000, 3001],
   "portsAttributes": {
     "3000": { "label": "Mi IA", "onAutoForward": "openBrowser" },
-    "3001": { "label": "Carta Náutica", "onAutoForward": "openBrowser" },
+    "3001": { "label": "Trappi a bordo", "onAutoForward": "openBrowser" },
     "11434": { "label": "Ollama", "onAutoForward": "ignore" }
   }
 }

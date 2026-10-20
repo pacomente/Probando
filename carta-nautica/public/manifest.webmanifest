@@ -1,7 +1,7 @@
 {
-  "name": "Carta Náutica Bahía Blanca",
-  "short_name": "Carta BB",
-  "description": "Carta náutica en vivo de la ría de Bahía Blanca, con emergencias y guía OMI. Funciona sin internet.",
+  "name": "Trappi Tecnología · Carta Náutica",
+  "short_name": "Trappi",
+  "description": "Carta náutica y monitoreo de flota pesquera en tiempo real. Funciona sin internet.",
   "lang": "es",
   "start_url": "./",
   "scope": "./",

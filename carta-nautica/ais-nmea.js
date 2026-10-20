@@ -1,6 +1,7 @@
-// Decodificador de sentencias AIS NMEA 0183 (!AIVDM / !AIVDO), para recibir buques sin internet
-// desde un receptor AIS a bordo (dAISy, rtl-ais, AIS-catcher, un multiplexor del buque…).
-// Solo descarta sentencias con checksum inválido: un dato corrupto nunca llega a la carta.
+// Lector de sentencias NMEA 0183 del puente: AIS (!AIVDM de otros buques, !AIVDO del propio)
+// y GPS ($GPRMC / $GNRMC). Sirve para recibir buques sin internet desde un receptor AIS a bordo
+// (dAISy, AIS-catcher, un multiplexor del buque…) y para saber la posición del propio barco.
+// Descarta toda sentencia con checksum inválido: un dato corrupto nunca llega a la carta.
 
 const TEXTO_6BIT = '@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_ !"#$%&\'()*+,-./0123456789:;<=>?';
 
@@ -19,10 +20,11 @@ export function crearDecodificador() {
     const linea = lineaCruda.trim().replace(/^\\[^\\]*\\/, ''); // quita etiquetas NMEA 4.0 (\s:...,c:...\)
     if (!/^!(AI|AB|BS)VD[MO],/.test(linea) || !checksumValido(linea)) return null;
     const campos = linea.split('*')[0].split(',');
-    const [, total, numero, secuencia, , carga, relleno] = campos;
+    const [encabezado, total, numero, secuencia, , carga, relleno] = campos;
     const n = Number(total);
     const num = Number(numero);
-    if (n === 1) return decodificarCarga(carga, Number(relleno));
+    const marcar = (datos) => (datos && encabezado.endsWith('VDO') ? { ...datos, propio: true } : datos);
+    if (n === 1) return marcar(decodificarCarga(carga, Number(relleno)));
     const clave = `${secuencia}-${n}`;
     if (num === 1) {
       for (const [k, v] of partes) if (Date.now() - v.hora > 10000) partes.delete(k);
@@ -37,8 +39,25 @@ export function crearDecodificador() {
     p.cargas.push(carga);
     if (num < n) return null;
     partes.delete(clave);
-    return decodificarCarga(p.cargas.join(''), Number(relleno));
+    return marcar(decodificarCarga(p.cargas.join(''), Number(relleno)));
   };
+}
+
+// Posición del GPS del barco: $--RMC,hhmmss,A,ddmm.mm,S,dddmm.mm,W,sog,cog,ddmmyy,...
+export function parsearRMC(lineaCruda) {
+  const linea = lineaCruda.trim();
+  if (!/^\$..RMC,/.test(linea) || !checksumValido(linea)) return null;
+  const c = linea.split('*')[0].split(',');
+  if (c[2] !== 'A') return null; // V = el GPS no tiene posición válida
+  const grados = (v, ancho, hemisferio, negativo) => {
+    if (!v) return null;
+    const g = Number(v.slice(0, ancho)) + Number(v.slice(ancho)) / 60;
+    return hemisferio === negativo ? -g : g;
+  };
+  const lat = grados(c[3], 2, c[4], 'S');
+  const lon = grados(c[5], 3, c[6], 'W');
+  if (lat == null || lon == null || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  return { lat, lon, sog: c[7] === '' ? null : Number(c[7]), cog: c[8] === '' ? null : Number(c[8]) };
 }
 
 function aBits(carga, relleno) {

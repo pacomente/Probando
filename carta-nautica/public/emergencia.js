@@ -6,7 +6,11 @@ import { $, esc, fmtPos, grados, guardar, leer, leerJSON, num } from './util.js'
 
 // ---------- Dispositivos de emergencia AIS ----------
 // MMSI 970… = AIS-SART, 972… = MOB, 974… = EPIRB-AIS (Recomendación UIT-R M.585)
+const NOMBRES_SOS = { MOB: 'HOMBRE AL AGUA', MAYDAY: 'MAYDAY (socorro)', PANPAN: 'PAN-PAN (urgencia)' };
+
 export function emergencia(b) {
+  // Alerta enviada por un barco de la flota desde Trappi a bordo
+  if (b.sos?.alerta && NOMBRES_SOS[b.sos.alerta]) return { tipo: `${NOMBRES_SOS[b.sos.alerta]} en ${b.nombre || b.mmsi}`, prueba: false, flota: true };
   const id = String(b.mmsi);
   const texto = b.mensajeSeguridad || '';
   let tipo = null;
@@ -62,7 +66,8 @@ export function silenciarAlarma(minutos = 5) {
 }
 
 // ---------- Hombre al agua ----------
-export function crearMOB({ map, obtenerPropio, obtenerPosicionRapida }) {
+// alAvisar(tipo, posicion): avisa a la oficina (Trappi Central) al marcar y al terminar
+export function crearMOB({ map, obtenerPropio, obtenerPosicionRapida, alAvisar = () => {} }) {
   let mob = leerJSON('carta-mob');
   let marcador = null;
   let linea = null;
@@ -91,6 +96,7 @@ export function crearMOB({ map, obtenerPropio, obtenerPosicionRapida }) {
     }
     mob = { lat: p.lat, lon: p.lon, hora, fuente };
     guardar('carta-mob', JSON.stringify(mob));
+    alAvisar('MOB', mob);
     dibujar();
     map.setView([mob.lat, mob.lon], Math.max(map.getZoom(), 15));
     actualizar();
@@ -100,6 +106,7 @@ export function crearMOB({ map, obtenerPropio, obtenerPosicionRapida }) {
     if (!confirm('¿La persona fue recuperada? Se borra la marca de hombre al agua.')) return;
     mob = null;
     guardar('carta-mob', '');
+    alAvisar('FIN');
     dibujar();
     actualizar();
   }

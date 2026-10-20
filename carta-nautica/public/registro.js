@@ -13,15 +13,18 @@ export class RegistroBuques {
     this.caducidadMs = caducidadMs;
   }
 
+  // datos.hora (opcional): cuándo se tomó la posición, si no es ahora (por ejemplo, llegada desde la central)
   actualizar(datos) {
-    const ahora = Date.now();
+    const ahora = Math.min(datos.hora ?? Date.now(), Date.now());
     const b = this.buques.get(datos.mmsi) || { mmsi: datos.mmsi, estela: [], ultimaEstela: 0 };
     const conPosicion = datos.lat != null && datos.lon != null;
+    if (conPosicion && b.actualizado && ahora <= b.actualizado) return; // dato repetido o más viejo
     if (conPosicion && b.lat != null && this.esSalto(b, datos, ahora)) {
       this.buques.set(datos.mmsi, b);
       return;
     }
     for (const [clave, valor] of Object.entries(datos)) {
+      if (clave === 'hora') continue;
       if (valor !== undefined && valor !== null && valor !== '') b[clave] = valor;
     }
     if (conPosicion) {

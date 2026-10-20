@@ -1,15 +1,21 @@
 {
-  "name": "carta-nautica",
+  "name": "trappi-carta-nautica",
   "version": "0.1.0",
-  "description": "Carta náutica de Bahía Blanca con buques AIS en tiempo real, avisos de tormenta, viento, olas y mareas.",
+  "description": "Trappi Tecnología: carta náutica y monitoreo de flota pesquera en tiempo real (a bordo y central).",
   "main": "server.js",
   "type": "module",
   "scripts": {
     "start": "node server.js",
+    "central": "node central.js",
     "dev": "node --watch server.js"
   },
   "engines": {
     "node": ">=22"
   },
-  "license": "MIT"
+  "license": "UNLICENSED",
+  "author": "Trappi Tecnología",
+  "private": true,
+  "optionalDependencies": {
+    "serialport": "^13.0.0"
+  }
 }

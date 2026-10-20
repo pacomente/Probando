@@ -30,7 +30,8 @@ const PUERTOS = [
 ];
 
 const TIPOS = {
-  emergencia: { color: '#ff0000', nombre: 'Emergencia (SART / MOB / EPIRB)' },
+  emergencia: { color: '#ff0000', nombre: 'Emergencia (SART / MOB / EPIRB / SOS)' },
+  flota: { color: '#7c5cff', nombre: 'Flota de la empresa' },
   carga: { color: '#2ecc71', nombre: 'Carga' },
   tanquero: { color: '#ff4d4f', nombre: 'Tanquero' },
   pasajeros: { color: '#3f8cff', nombre: 'Pasajeros' },
@@ -134,10 +135,17 @@ let riesgos = [];
 let propio = null;
 let estadoFuente = { modo: null, conectado: false, fuentes: [] };
 let ultimoPaquete = null;
+let config = { rol: 'abordo' };
+let flotaEncuadrada = false;
+let socorro = null;
+
+// Las claves pueden ser MMSI (número) o barcos de la flota sin AIS ("trappi-…")
+const claveBuque = (texto) => [...buques.keys()].find((k) => String(k) === String(texto));
 
 function categoria(b) {
   const em = emergencia(b);
   if (em && !em.prueba) return 'emergencia';
+  if (b.flota) return 'flota';
   const tipo = b.tipo;
   if (tipo >= 70 && tipo <= 79) return 'carga';
   if (tipo >= 80 && tipo <= 89) return 'tanquero';
@@ -151,6 +159,7 @@ function categoria(b) {
 function descripcionTipo(b) {
   const em = emergencia(b);
   if (em) return em.prueba ? `${em.tipo} (en PRUEBA)` : em.tipo;
+  if (b.flota) return 'Barco de la flota · Trappi';
   const t = b.tipo;
   const nombres = { 30: 'Pesquero', 31: 'Remolcando', 32: 'Remolcando (grande)', 33: 'Draga', 34: 'Buceo', 35: 'Militar',
     36: 'Velero', 37: 'Embarcación de recreo', 50: 'Lancha de prácticos', 51: 'Búsqueda y rescate', 52: 'Remolcador',
@@ -186,7 +195,7 @@ function iconoBuque(b, sel, vieja) {
   } else {
     forma = '<circle r="5" stroke="#06121d" stroke-width="1.2"/>';
   }
-  const clases = ['buque', sel && 'sel', vieja && 'vieja', cat === 'emergencia' && 'emergencia'].filter(Boolean).join(' ');
+  const clases = ['buque', sel && 'sel', vieja && 'vieja', cat === 'emergencia' && 'emergencia', b.flota && 'flota'].filter(Boolean).join(' ');
   return L.divIcon({
     className: clases,
     html: `<svg width="26" height="26" viewBox="-13 -13 26 26" fill="${color}">${forma}</svg><span class="etiqueta">${esc(b.nombre || b.mmsi)}</span>`,
@@ -202,6 +211,12 @@ function procesar(paquete) {
   const ahoraLocal = Date.now();
   const desfase = ahoraLocal - (paquete.ahora || ahoraLocal);
   const vistos = new Set();
+  // GPS del barco (leído por Trappi a bordo): se usa si el dispositivo no tiene su propio GPS encendido
+  if (paquete.propio && vigilancia == null) {
+    const g = paquete.propio;
+    actualizarPropio({ timestamp: g.hora + desfase, coords: { latitude: g.lat, longitude: g.lon, accuracy: null,
+      speed: g.sog != null ? g.sog / 1.943844 : null, heading: g.cog } }, g.origen || 'GPS del barco');
+  }
 
   for (const b of paquete.buques) {
     if (!Number.isFinite(b.lat) || !Number.isFinite(b.lon)) continue;
@@ -230,6 +245,12 @@ function procesar(paquete) {
       buques.delete(mmsi);
       if (seleccionado === mmsi) cerrarFicha();
     }
+  }
+  // La oficina arranca mostrando toda su flota
+  if (config.rol === 'central' && !flotaEncuadrada && buques.size) {
+    flotaEncuadrada = true;
+    const limites = L.latLngBounds([...buques.values()].map((e) => [e.datos.lat, e.datos.lon]));
+    map.fitBounds(limites.pad(0.3), { maxZoom: 11 });
   }
   refrescarIconos();
   calcularRiesgos();
@@ -368,8 +389,7 @@ function renderLista() {
 $('#lista-buques').addEventListener('click', (ev) => {
   const li = ev.target.closest('li[data-mmsi]');
   if (!li) return;
-  const mmsi = Number(li.dataset.mmsi);
-  irA(mmsi);
+  irA(claveBuque(li.dataset.mmsi));
   if (matchMedia('(max-width: 760px)').matches) $('#panel').classList.remove('abierto');
 });
 $('#buscar').addEventListener('input', renderLista);
@@ -424,7 +444,7 @@ function renderFicha() {
     ['Desde mí', propio ? `${num(distNM(propio, p))} MN al ${grados(rumbo(propio, p))}` : null],
     ['Mensaje AIS', b.mensajeSeguridad],
     ['Datos descartados', b.saltosDescartados ? `${b.saltosDescartados} posiciones imposibles` : null],
-    ['Señal AIS', b.sim ? 'simulada (práctica)' : hace(ms)],
+    [b.flota ? 'Última posición' : 'Señal AIS', b.sim ? 'simulada (práctica)' : hace(ms)],
   ].filter(([, v]) => v != null && v !== '');
   $('#ficha').hidden = false;
   $('#ficha').innerHTML = `
@@ -439,10 +459,14 @@ function renderFicha() {
     <div class="botones">
       <button id="ficha-seguir" class="${siguiendo ? 'activo' : ''}">🎯 ${siguiendo ? 'Siguiendo' : 'Seguir'}</button>
       <button id="ficha-centrar">⌖ Centrar</button>
-    </div>`;
+      ${config.rol === 'central' && b.flota ? `<button id="ficha-historial" class="${historialDe === b.id ? 'activo' : ''}">🕑 Recorrido 24 h</button>` : ''}
+    </div>
+    <p class="nota">${historialDe === b.id ? esc(historialTexto) : ''}</p>`;
   $('#ficha-cerrar').onclick = cerrarFicha;
   $('#ficha-seguir').onclick = () => { siguiendo = !siguiendo; renderFicha(); };
   $('#ficha-centrar').onclick = () => map.setView([p.lat, p.lon], Math.max(map.getZoom(), 13));
+  const botonHistorial = $('#ficha-historial');
+  if (botonHistorial) botonHistorial.onclick = () => verRecorrido(b);
 }
 
 $('#leyenda').innerHTML = Object.values(TIPOS)
@@ -461,6 +485,10 @@ function ponerModo() {
     el.textContent = 'AIS: SIN SEÑAL';
     el.className = 'modo sin-datos';
     el.title = 'El servidor no recibe datos AIS en este momento';
+  } else if (modo === 'flota') {
+    el.textContent = 'FLOTA EN VIVO';
+    el.className = 'modo vivo';
+    el.title = 'Posiciones de los barcos de la empresa por Trappi Central';
   } else if (modo === 'simulacion') {
     el.textContent = local ? 'PRÁCTICA (simulación)' : 'SIMULACIÓN';
     el.className = 'modo sim';
@@ -807,6 +835,7 @@ function alertasEmergencia() {
         clave: `emergencia-${b.mmsi}-${em.prueba}`,
         titulo: em.prueba ? `${em.tipo}: prueba del equipo` : em.tipo.toUpperCase(),
         texto: `${b.nombre || `MMSI ${b.mmsi}`} en ${fmtPos(p)} (${num(distNM(ING_WHITE, p))} MN al ${grados(rumbo(ING_WHITE, p))} de Ing. White).${desdeMi}` +
+          (b.sos ? ` Alerta enviada ${hace(Date.now() - b.sos.hora)}${b.sos.lat != null ? `, posición del evento ${fmtPos(b.sos)}` : ''}.${b.sos.texto ? ` «${b.sos.texto.split('\n').slice(0, 3).join(' / ')}…»` : ''}` : '') +
           (em.prueba ? ' Es una prueba, no una emergencia.' : ' Avisá a Prefectura: 106 o VHF canal 16.') + (senalVieja(e) ? ` Última señal ${hace(edad(e))}.` : ''),
       });
     } else if (b.mensajeSeguridad && b.horaMensaje && Date.now() - b.horaMensaje < 30 * 60000) {
@@ -870,14 +899,14 @@ function renderAlertas() {
 $('#alerta-tormenta').addEventListener('click', () => abrirPestana('alertas'));
 $('#alerta-emergencia').addEventListener('click', (ev) => {
   if (ev.target.id === 'btn-silenciar') return;
-  const mmsi = Number($('#alerta-emergencia').dataset.mmsi);
-  if (mmsi) irA(mmsi);
+  const clave = claveBuque($('#alerta-emergencia').dataset.mmsi);
+  if (clave != null) irA(clave);
   else abrirPestana('alertas');
 });
 $('#btn-silenciar').addEventListener('click', () => silenciarAlarma(5));
 $('#lista-alertas').addEventListener('click', (ev) => {
   const li = ev.target.closest('li[data-mmsi]');
-  if (li) irA(Number(li.dataset.mmsi));
+  if (li) irA(claveBuque(li.dataset.mmsi));
 });
 
 // ---------- Estado de los datos ----------
@@ -897,22 +926,30 @@ function renderEstado() {
   const filas = [fila(conInternet ? 'ok' : 'mal', conInternet ? 'Con internet' : '<b>Sin internet</b>: funcionan la carta guardada, GPS, MOB, guía OMI y el último pronóstico')];
   const { modo, fuentes = [] } = estadoFuente;
   if (modo === 'simulacion') filas.push(fila('med', '<b>Buques simulados</b> (práctica): no son reales'));
-  else if (modo === 'sin-datos' || !fuentes.length) filas.push(fila('mal', 'AIS: sin conexión con el servidor. No se muestran buques nuevos.'));
-  for (const f of fuentes) {
+  else if (modo === 'sin-datos' || !fuentes.length) filas.push(fila('mal', 'Sin conexión con el servidor de datos. No se muestran buques nuevos.'));
+  for (const f of fuentes.filter((x) => x.central)) {
+    const antiguedad = f.ultimo ? estadoFuente.ahora - f.ultimo + (Date.now() - ultimoPaquete) : null;
+    filas.push(fila(f.conectado ? 'ok' : 'mal', `${esc(f.nombre)}: ${f.conectado ? 'conectado' : `<b>sin conexión</b>${f.error ? ` (${esc(f.error)})` : ''}`}` +
+      `${antiguedad != null ? `, último envío ${hace(antiguedad)}` : ''}${f.pendientes ? `, <b>${f.pendientes} datos esperando para enviarse</b>` : ', nada pendiente'}`));
+  }
+  for (const f of fuentes.filter((x) => !x.central)) {
     // f.ultimo viene con el reloj del servidor: se compara con la hora del servidor en el último paquete
     const antiguedad = f.ultimo ? estadoFuente.ahora - f.ultimo + (Date.now() - ultimoPaquete) : null;
     const extra = f.descartados ? `, ${f.descartados} sentencias corruptas descartadas` : '';
     filas.push(fila(f.conectado && antiguedad != null && antiguedad < 120000 ? 'ok' : 'mal',
-      `${esc(f.nombre)}: ${antiguedad != null ? `último dato ${hace(antiguedad)}` : 'sin datos todavía'} (${f.mensajes} mensajes${extra})`));
+      `${esc(f.nombre)}: ${antiguedad != null ? `último dato ${hace(antiguedad)}` : 'sin datos todavía'} (${f.mensajes} mensajes${extra})${f.error ? ` · ${esc(f.error)}` : ''}`));
   }
   if (tiempoGuardado) {
     filas.push(fila(tiempoSinConexion ? 'med' : 'ok', `Pronóstico: ${tiempoSinConexion ? 'guardado' : 'actualizado'} ${hace(Date.now() - tiempoGuardado)}`));
   } else {
     filas.push(fila('mal', 'Pronóstico: sin datos'));
   }
-  filas.push(propio
-    ? fila(propio.precisionM <= 20 ? 'ok' : 'med', `GPS: ±${Math.round(propio.precisionM)} m, ${hace(Date.now() - propio.hora)}`)
-    : fila('med', 'GPS: apagado (tocá 📍 Mi posición)'));
+  if (config.rol !== 'central') {
+    filas.push(propio
+      ? fila(propio.precisionM == null || propio.precisionM <= 20 ? 'ok' : 'med',
+        `${esc(propio.origen)}: ${propio.precisionM != null ? `±${Math.round(propio.precisionM)} m, ` : ''}${hace(Date.now() - propio.hora)}`)
+      : fila('med', 'GPS: sin datos (conectá el GPS del barco o tocá 📍 Mi posición)'));
+  }
   if (teselasGuardadas != null) filas.push(fila(teselasGuardadas ? 'ok' : 'med', `Carta sin internet: ${teselasGuardadas} teselas guardadas + costa incluida`));
   $('#estado-datos').innerHTML = filas.join('');
 }
@@ -958,25 +995,25 @@ let circuloPrecision = null;
 let vigilancia = null;
 let primeraPosicion = true;
 
-function actualizarPropio(pos) {
+function actualizarPropio(pos, origen = 'GPS de este dispositivo') {
   const c = pos.coords;
   const nuevo = { lat: c.latitude, lon: c.longitude };
   // Un GPS que salta a una posición imposible (más de 60 nudos) se ignora
   if (propio && distNM(propio, nuevo) > 0.5 && distNM(propio, nuevo) / Math.max((pos.timestamp - propio.hora) / 3600000, 1 / 3600) > 60) return;
-  propio = { mmsi: 'PROPIO', nombre: 'Mi posición', ...nuevo, hora: pos.timestamp, precisionM: c.accuracy,
+  propio = { mmsi: 'PROPIO', nombre: 'Mi posición', ...nuevo, hora: pos.timestamp, precisionM: c.accuracy, origen,
     sog: c.speed != null ? c.speed * 1.943844 : null, cog: c.heading != null && !Number.isNaN(c.heading) ? c.heading : null };
   const ll = [c.latitude, c.longitude];
   if (!marcadorPropio) {
     marcadorPropio = L.marker(ll, { zIndexOffset: 1500, icon: L.divIcon({ className: 'propio', iconSize: [22, 22],
       html: '<svg width="22" height="22" viewBox="-11 -11 22 22"><circle r="9" fill="#3fb6ff" fill-opacity="0.3" stroke="#3fb6ff" stroke-width="2"/><circle r="4" fill="#fff" stroke="#3fb6ff" stroke-width="2"/></svg>' }) })
       .bindTooltip('Mi posición').addTo(map);
-    circuloPrecision = L.circle(ll, { radius: c.accuracy, color: '#3fb6ff', weight: 1, fillOpacity: 0.08 }).addTo(map);
+    circuloPrecision = L.circle(ll, { radius: c.accuracy || 0, color: '#3fb6ff', weight: 1, fillOpacity: 0.08 }).addTo(map);
   }
   marcadorPropio.setLatLng(ll);
-  circuloPrecision.setLatLng(ll).setRadius(c.accuracy);
-  marcadorPropio.setTooltipContent(`Mi posición · ${fmtPos(propio)} · ±${Math.round(c.accuracy)} m${propio.sog != null ? ` · ${num(propio.sog)} kn ${grados(propio.cog)}` : ''}`);
+  circuloPrecision.setLatLng(ll).setRadius(c.accuracy || 0);
+  marcadorPropio.setTooltipContent(`Mi posición (${origen}) · ${fmtPos(propio)}${c.accuracy ? ` · ±${Math.round(c.accuracy)} m` : ''}${propio.sog != null ? ` · ${num(propio.sog)} kn ${grados(propio.cog)}` : ''}`);
   if (primeraPosicion) { map.setView(ll, Math.max(map.getZoom(), 12)); primeraPosicion = false; }
-  socorro.generar();
+  socorro?.generar();
 }
 
 function encenderGPS() {
@@ -997,7 +1034,7 @@ function apagarGPS() {
   circuloPrecision?.remove();
   marcadorPropio = circuloPrecision = null;
   $('#btn-gps').classList.remove('activo');
-  socorro.generar();
+  socorro?.generar();
 }
 
 $('#btn-gps').addEventListener('click', () => {
@@ -1019,8 +1056,8 @@ function obtenerPosicionRapida() {
 }
 
 // ---------- Hombre al agua y mensajes de socorro ----------
-const mob = crearMOB({ map, obtenerPropio: () => propio, obtenerPosicionRapida });
-const socorro = crearGeneradorSocorro({
+const mob = crearMOB({ map, obtenerPropio: () => propio, obtenerPosicionRapida, alAvisar: avisarOficina });
+socorro = crearGeneradorSocorro({
   obtenerPropio: () => propio,
   obtenerMOB: () => mob.actual(),
   referencia: { punto: ING_WHITE, nombre: 'PUERTO INGENIERO WHITE' },
@@ -1034,6 +1071,84 @@ $('#mob-mayday').addEventListener('click', () => {
   abrirPestana('sos');
 });
 mob.actualizar();
+
+
+// ---------- Avisos a la oficina (Trappi Central) ----------
+async function avisarOficina(tipo, posicion = null, texto = '') {
+  if (config.rol !== 'abordo' || !config.central) return { enviada: false, motivo: 'Este equipo no está vinculado a Trappi Central' };
+  try {
+    const r = await fetch('api/alerta', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo, ...(posicion ? { lat: posicion.lat, lon: posicion.lon } : {}), texto }) });
+    return await r.json();
+  } catch {
+    return { enviada: false, motivo: 'Sin conexión con Trappi a bordo' };
+  }
+}
+
+$('#sos-enviar').addEventListener('click', async () => {
+  const tipo = document.querySelector('input[name="sos-tipo"]:checked').value;
+  if (tipo === 'securite') { $('#sos-enviar-estado').textContent = 'Los avisos SÉCURITÉ se transmiten por radio; a la oficina se envían MAYDAY y PAN-PAN.'; return; }
+  if (!confirm(`¿Enviar ${tipo === 'mayday' ? 'MAYDAY' : 'PAN-PAN'} a la oficina? Esto NO reemplaza la llamada por VHF canal 16 ni el aviso a Prefectura.`)) return;
+  const lugar = $('#sos-naturaleza').value === 'mob' && mob.actual() ? mob.actual() : propio;
+  const r = await avisarOficina(tipo === 'mayday' ? 'MAYDAY' : 'PANPAN', lugar, $('#sos-mensaje').textContent);
+  $('#sos-enviar-estado').textContent = r.ok
+    ? (r.enviada ? '✓ Enviado a la oficina.' : '⏳ Sin conexión ahora: quedó guardado y se envía apenas vuelva internet.')
+    : `No se pudo enviar: ${r.motivo || r.error}`;
+});
+
+// ---------- Recorrido histórico (oficina) ----------
+const capaHistorial = L.layerGroup().addTo(map);
+let historialDe = null;
+let historialTexto = '';
+async function verRecorrido(b, horas = 24) {
+  capaHistorial.clearLayers();
+  if (historialDe === b.id) { historialDe = null; renderFicha(); return; }
+  try {
+    const r = await fetch(`api/historial?buque=${encodeURIComponent(b.id)}&horas=${horas}`);
+    const datos = await r.json();
+    if (!r.ok) throw new Error(datos.error);
+    historialDe = b.id;
+    if (datos.puntos.length) {
+      const linea = L.polyline(datos.puntos.map(([la, lo]) => [la, lo]), { color: '#7c5cff', weight: 3, opacity: 0.85 }).addTo(capaHistorial);
+      const [la0, lo0, h0] = datos.puntos[0];
+      L.circleMarker([la0, lo0], { radius: 5, color: '#7c5cff', fillOpacity: 1 }).bindTooltip(`Inicio: ${diaHora(h0)}`).addTo(capaHistorial);
+      map.fitBounds(linea.getBounds(), { padding: [40, 40], maxZoom: 13 });
+    }
+    historialTexto = datos.puntos.length
+      ? `Recorrido de ${horas} h: ${datos.puntos.length} posiciones, ${num(recorrido(datos.puntos))} MN navegadas.`
+      : `Sin posiciones en las últimas ${horas} h.`;
+    renderFicha();
+  } catch (e) {
+    alert(`No se pudo cargar el recorrido: ${e.message}`);
+  }
+}
+const recorrido = (puntos) => puntos.reduce((t, p, i) => (i ? t + distNM({ lat: puntos[i - 1][0], lon: puntos[i - 1][1] }, { lat: p[0], lon: p[1] }) : 0), 0);
+
+// ---------- Configuración según dónde corre: PC del barco u oficina ----------
+async function cargarConfig() {
+  try {
+    const r = await fetch('api/config');
+    if (r.status === 401) { location.href = 'login.html'; return; }
+    if (r.ok) config = await r.json();
+  } catch { /* sin servidor: se queda como equipo de a bordo */ }
+  if (config.rol === 'central') {
+    $('#titulo-producto').textContent = '· Monitoreo de flota';
+    $('#sesion').hidden = false;
+    $('#sesion').textContent = `${config.empresa} · ${config.usuario}`;
+    $('#btn-salir').hidden = false;
+    $('#btn-mob').hidden = true;
+    $('#btn-gps').hidden = true;
+    $('#filtro-tipo').value = '';
+  } else if (config.central) {
+    $('#titulo-producto').textContent = `· A bordo${config.buque ? ` · ${config.buque.nombre}` : ''}`;
+    $('#sos-enviar').hidden = false;
+  }
+  renderEstado();
+}
+$('#btn-salir').addEventListener('click', async () => {
+  try { await fetch('api/logout', { method: 'POST' }); } catch { /* igual se sale */ }
+  location.href = 'login.html';
+});
 
 // ---------- Regla: distancia y rumbo ----------
 let regla = null;
@@ -1115,6 +1230,6 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').then(() => contarTeselas().then(renderEstado)).catch(() => {});
 }
 
-conectar();
+cargarConfig().then(conectar);
 cargarTiempo();
 renderEstado();

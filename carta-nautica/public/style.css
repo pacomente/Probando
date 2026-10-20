@@ -239,7 +239,7 @@ body.noche #mapa { background: #000; }
   .leaflet-bottom { bottom: 44px; }
   .solo-movil { display: inline-block; }
   h1 { font-size: 14px; }
-  .logo { display: none; }
+  .logo { width: 28px; height: 28px; }
   .contenido { flex-direction: column; }
   .panel {
     position: absolute;
@@ -378,4 +378,20 @@ body.noche .leaflet-costa-pane { filter: invert(1) hue-rotate(180deg) brightness
   .pestanas button { font-size: 11px; padding: 10px 2px; }
   .alerta-emergencia { font-size: 13px; padding: 8px 10px; }
   .mob { top: 6px; }
+}
+
+/* ---------- Marca Trappi Tecnología ---------- */
+.logo { width: 34px; height: 34px; border-radius: 8px; flex-shrink: 0; }
+.marca-nombre { font-weight: 900; letter-spacing: 0.12em; }
+.marca-tec { font-weight: 400; color: var(--suave); }
+.marca-producto { font-weight: 400; color: var(--suave); font-size: 13px; }
+.sesion { color: var(--suave); }
+.botones-fila { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-alerta { background: var(--peligro); border-color: var(--peligro); color: #fff; font-weight: 700; }
+.buque.flota svg { filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 3px #7c5cff); }
+.buque.flota .etiqueta { font-weight: 800; }
+.leaflet-container .historial-tip { font-size: 11px; }
+
+@media (max-width: 760px) {
+  .marca-producto { display: none; }
 }

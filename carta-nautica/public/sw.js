@@ -2,9 +2,9 @@
 // - La página y sus archivos: primero la red (para recibir actualizaciones), si falla, lo guardado.
 // - Teselas del mapa: primero lo guardado (rápido y sin conexión), con un límite de tamaño.
 // - Datos en vivo (/api) y pronóstico: nunca se cachean aquí (la página guarda el último pronóstico).
-const VERSION = 'carta-v2';
+const VERSION = 'trappi-v3';
 const APP = [
-  './', 'index.html', 'style.css', 'app.js', 'navegacion.js', 'registro.js', 'simulacion.js', 'emergencia.js',
+  './', 'index.html', 'login.html', 'style.css', 'app.js', 'navegacion.js', 'registro.js', 'simulacion.js', 'emergencia.js',
   'util.js', 'costa.js', 'manifest.webmanifest', 'icono.svg', 'icono-192.png', 'icono-512.png',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/leaflet/images/layers.png',
   'vendor/leaflet/images/layers-2x.png', 'vendor/leaflet/images/marker-icon.png', 'vendor/leaflet/images/marker-shadow.png',
