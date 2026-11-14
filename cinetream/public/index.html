@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Cinetream</title>
+  <meta name="description" content="Cinetream: películas para ver en la tele y en el celular.">
+  <meta name="theme-color" content="#0c0d12">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icono-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=Figtree:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+  <header class="barra" id="barra">
+    <span class="logo" aria-label="Cinetream"><span class="logo-marca">CINE</span><span class="logo-sub">TREAM</span></span>
+    <nav class="menu" aria-label="Secciones">
+      <button data-nav data-ir="inicio" class="activo">Inicio</button>
+      <button data-nav data-ir="buscar">Buscar</button>
+      <button data-nav data-ir="lista">Mi lista</button>
+    </nav>
+    <button class="perfil-actual" data-nav data-ir="perfiles" aria-label="Cambiar de perfil"><span class="avatar" id="avatar-actual"></span></button>
+  </header>
+
+  <main>
+    <section id="vista-perfiles" class="vista perfiles" hidden>
+      <h1>¿Quién está mirando?</h1>
+      <div class="perfiles-lista" id="perfiles-lista"></div>
+    </section>
+
+    <section id="vista-inicio" class="vista" hidden>
+      <div class="portada" id="portada"></div>
+      <div id="filas"></div>
+    </section>
+
+    <section id="vista-ficha" class="vista ficha" hidden></section>
+
+    <section id="vista-buscar" class="vista buscar" hidden>
+      <div class="buscar-entrada">
+        <input id="buscar-texto" type="search" placeholder="Película, director, género o año" autocomplete="off" data-nav aria-label="Buscar">
+      </div>
+      <div class="teclado" id="teclado" hidden></div>
+      <p class="buscar-estado" id="buscar-estado"></p>
+      <div class="grilla" id="buscar-resultados"></div>
+    </section>
+
+    <section id="vista-lista" class="vista" hidden>
+      <h1 class="titulo-vista">Mi lista</h1>
+      <div class="grilla" id="lista-grilla"></div>
+    </section>
+  </main>
+
+  <section id="vista-reproductor" class="reproductor" hidden></section>
+
+  <nav class="pestanas-movil" aria-label="Secciones">
+    <button data-ir="inicio" class="activo"><span aria-hidden="true">⌂</span>Inicio</button>
+    <button data-ir="buscar"><span aria-hidden="true">⌕</span>Buscar</button>
+    <button data-ir="lista"><span aria-hidden="true">＋</span>Mi lista</button>
+    <button data-ir="perfiles"><span class="avatar mini" id="avatar-movil"></span>Perfil</button>
+  </nav>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

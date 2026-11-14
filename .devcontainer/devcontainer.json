@@ -9,10 +9,11 @@
   "postCreateCommand": "bash .devcontainer/setup.sh",
   // Cada vez que abres el Codespace: arranca Ollama y la IA
   "postAttachCommand": "bash .devcontainer/start.sh",
-  "forwardPorts": [3000, 3001],
+  "forwardPorts": [3000, 3001, 3500],
   "portsAttributes": {
     "3000": { "label": "Mi IA", "onAutoForward": "openBrowser" },
     "3001": { "label": "Trappi a bordo", "onAutoForward": "openBrowser" },
+    "3500": { "label": "Cinetream", "onAutoForward": "openBrowser" },
     "11434": { "label": "Ollama", "onAutoForward": "ignore" }
   }
 }
