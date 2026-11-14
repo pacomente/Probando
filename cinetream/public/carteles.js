@@ -35,17 +35,26 @@ function svg(p, ancho, alto, recorte) {
   const id = `g${++contador}`;
   const [fondo, acento] = p.colores;
   const motivo = (MOTIVOS[p.motivo] || MOTIVOS.anillos)(acento, fondo);
-  // En apaisado, la figura se ubica a la derecha y la escena se oscurece hacia la izquierda, donde va el texto
-  const escena = recorte === 'ancho'
+  const apaisado = recorte === 'ancho';
+  // En apaisado, la figura va a la derecha y la escena se oscurece hacia la izquierda, donde va el texto
+  const escena = apaisado
     ? `<g transform="translate(${ancho * 0.52} ${alto * -0.08}) scale(${(alto * 1.15) / 300})">${motivo}</g>
        <rect width="${ancho}" height="${alto}" fill="url(#${id}l)"/>`
     : motivo;
+  // Luz cálida detrás de la figura y viñeta en los bordes, como en un afiche impreso
+  const luzX = apaisado ? 0.72 : 0.62;
+  const luzY = apaisado ? 0.35 : 0.33;
   return `<svg viewBox="0 0 ${ancho} ${alto}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
     <defs>
-      <linearGradient id="${id}" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="${fondo}"/><stop offset="1" stop-color="${mezclar(fondo, '#000000', 0.55)}"/></linearGradient>
+      <linearGradient id="${id}" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="${mezclar(fondo, '#ffffff', 0.06)}"/><stop offset="1" stop-color="${mezclar(fondo, '#000000', 0.6)}"/></linearGradient>
+      <radialGradient id="${id}r" cx="${luzX}" cy="${luzY}" r="0.55"><stop offset="0" stop-color="${acento}" stop-opacity=".28"/><stop offset="1" stop-color="${acento}" stop-opacity="0"/></radialGradient>
+      <radialGradient id="${id}v" cx="0.5" cy="0.45" r="0.75"><stop offset="0.55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></radialGradient>
       <linearGradient id="${id}l" x1="0" y1="0" x2="1" y2="0"><stop offset="0.25" stop-color="#0b0b10" stop-opacity=".95"/><stop offset="0.7" stop-color="#0b0b10" stop-opacity="0"/></linearGradient>
     </defs>
-    <rect width="${ancho}" height="${alto}" fill="url(#${id})"/>${escena}
+    <rect width="${ancho}" height="${alto}" fill="url(#${id})"/>
+    <rect width="${ancho}" height="${alto}" fill="url(#${id}r)"/>
+    ${escena}
+    <rect width="${ancho}" height="${alto}" fill="url(#${id}v)"/>
   </svg>`;
 }
 
@@ -55,14 +64,33 @@ function mezclar(a, b, t) {
   return `#${x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('')}`;
 }
 
-// Afiche vertical con el título
-export function afiche(p) {
-  return `<div class="afiche">${svg(p, 200, 300)}<span class="afiche-titulo">${esc(p.titulo)}</span><span class="afiche-anio">${p.anio}</span></div>`;
+// Afiche vertical: estudio arriba, título con tipografía de cartel y año
+export function afiche(p, firma = '') {
+  return `<div class="afiche">${svg(p, 200, 300)}
+    ${firma ? `<span class="afiche-firma">${esc(firma)}</span>` : ''}
+    <span class="afiche-titulo">${esc(p.titulo)}</span><span class="afiche-anio">${p.anio}</span></div>`;
+}
+
+// Miniatura apaisada (16:9) para "Seguir viendo"
+export function miniatura(p) {
+  return `<div class="miniatura">${svg(p, 1600, 900, 'ancho')}<span class="miniatura-titulo">${esc(p.titulo)}</span></div>`;
 }
 
 // Fondo apaisado para la portada y la ficha
 export function fondoApaisado(p) {
   return svg(p, 1600, 900, 'ancho');
+}
+
+// Avatar de perfil: una cara simple sobre el color elegido (la forma de los ojos cambia con el estilo)
+export function avatar(perfil) {
+  const ojos = {
+    puntos: '<circle cx="36" cy="44" r="5"/><circle cx="64" cy="44" r="5"/>',
+    lineas: '<rect x="28" y="42" width="16" height="5" rx="2.5"/><rect x="56" y="42" width="16" height="5" rx="2.5"/>',
+    grandes: '<circle cx="36" cy="44" r="8"/><circle cx="64" cy="44" r="8"/><circle cx="38" cy="42" r="2.5" fill="#fff"/><circle cx="66" cy="42" r="2.5" fill="#fff"/>',
+    guino: '<circle cx="36" cy="44" r="5"/><path d="M57 45 q7 -6 14 0" stroke="#0c0d12" stroke-width="5" fill="none" stroke-linecap="round"/>',
+  }[perfil.estilo] || '';
+  return `<svg viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="14" fill="${perfil.color}"/>
+    <g fill="#0c0d12">${ojos}</g><path d="M32 64 q18 16 36 0" stroke="#0c0d12" stroke-width="6" fill="none" stroke-linecap="round"/></svg>`;
 }
 
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);

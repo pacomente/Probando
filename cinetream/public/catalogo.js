@@ -95,6 +95,13 @@ export const PELICULAS = [
   },
 ];
 
+// Selección editorial con números grandes en el inicio (orden = puesto)
+export const IMPRESCINDIBLES = ['sintel', 'nosferatu', 'big-buck-bunny', 'viaje-a-la-luna', 'tears-of-steel',
+  'caminandes-llamigos', 'caligari', 'cosmos-laundromat', 'spring', 'elephants-dream'];
+
+// Quién firma cada película en el afiche y la ficha
+export const estudio = (p) => (p.licencia.startsWith('Dominio') ? 'Clásico del cine' : 'Blender Studio');
+
 // Filas de la pantalla de inicio, en orden
 export const FILAS = [
   { titulo: 'Destacadas', filtro: (p) => p.destacada },

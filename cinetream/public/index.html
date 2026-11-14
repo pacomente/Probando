@@ -15,51 +15,107 @@
   <link rel="stylesheet" href="estilos.css">
 </head>
 <body>
+  <div class="intro" id="intro" aria-hidden="true">
+    <div class="intro-logo"><span class="logo-marca">CINE</span><span class="logo-sub">TREAM</span></div>
+    <div class="intro-linea"></div>
+  </div>
+
   <header class="barra" id="barra">
     <span class="logo" aria-label="Cinetream"><span class="logo-marca">CINE</span><span class="logo-sub">TREAM</span></span>
     <nav class="menu" aria-label="Secciones">
       <button data-nav data-ir="inicio" class="activo">Inicio</button>
-      <button data-nav data-ir="buscar">Buscar</button>
+      <button data-nav data-ir="explorar">Explorar</button>
       <button data-nav data-ir="lista">Mi lista</button>
     </nav>
-    <button class="perfil-actual" data-nav data-ir="perfiles" aria-label="Cambiar de perfil"><span class="avatar" id="avatar-actual"></span></button>
+    <div class="barra-derecha">
+      <button class="icono-barra" data-nav data-ir="buscar" aria-label="Buscar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5 L21 21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+      </button>
+      <button class="perfil-actual" data-nav data-ir="ajustes" aria-label="Perfil y ajustes"><span class="avatar avatar-actual"></span></button>
+    </div>
   </header>
 
   <main>
     <section id="vista-perfiles" class="vista perfiles" hidden>
+      <span class="logo perfiles-logo"><span class="logo-marca">CINE</span><span class="logo-sub">TREAM</span></span>
       <h1>¿Quién está mirando?</h1>
       <div class="perfiles-lista" id="perfiles-lista"></div>
+      <button class="btn contorno" data-nav id="perfiles-administrar">Administrar perfiles</button>
     </section>
+
+    <section id="vista-editar" class="vista editar" hidden></section>
 
     <section id="vista-inicio" class="vista" hidden>
       <div class="portada" id="portada"></div>
       <div id="filas"></div>
     </section>
 
+    <section id="vista-explorar" class="vista pagina" hidden>
+      <h1 class="titulo-vista">Explorar</h1>
+      <p class="bajada-vista">Todo el catálogo por género.</p>
+      <div class="generos" id="explorar-grilla"></div>
+    </section>
+
+    <section id="vista-genero" class="vista pagina" hidden>
+      <h1 class="titulo-vista" id="genero-titulo"></h1>
+      <p class="bajada-vista" id="genero-cuenta"></p>
+      <div class="grilla" id="genero-grilla"></div>
+    </section>
+
     <section id="vista-ficha" class="vista ficha" hidden></section>
 
-    <section id="vista-buscar" class="vista buscar" hidden>
+    <section id="vista-buscar" class="vista pagina buscar" hidden>
       <div class="buscar-entrada">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5 L21 21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
         <input id="buscar-texto" type="search" placeholder="Película, director, género o año" autocomplete="off" data-nav aria-label="Buscar">
       </div>
       <div class="teclado" id="teclado" hidden></div>
+      <div class="sugerencias" id="sugerencias"></div>
       <p class="buscar-estado" id="buscar-estado"></p>
       <div class="grilla" id="buscar-resultados"></div>
     </section>
 
-    <section id="vista-lista" class="vista" hidden>
+    <section id="vista-lista" class="vista pagina" hidden>
       <h1 class="titulo-vista">Mi lista</h1>
       <div class="grilla" id="lista-grilla"></div>
     </section>
+
+    <section id="vista-ajustes" class="vista pagina ajustes" hidden>
+      <h1 class="titulo-vista">Perfil y ajustes</h1>
+      <div class="ajustes-perfil">
+        <div class="ajustes-quien" id="ajustes-perfil"></div>
+        <div class="acciones">
+          <button class="btn" data-nav id="ajustes-cambiar">Cambiar de perfil</button>
+          <button class="btn" data-nav id="ajustes-editar">Editar este perfil</button>
+        </div>
+      </div>
+      <h2>Reproducción</h2>
+      <button data-nav class="interruptor" id="ajuste-siguiente">
+        <span class="interruptor-caja" aria-hidden="true"></span>
+        <span><b>Reproducir la siguiente automáticamente</b><small>Al terminar una película, empieza la siguiente después de 10 segundos.</small></span>
+      </button>
+      <button data-nav class="interruptor" id="ajuste-animaciones">
+        <span class="interruptor-caja" aria-hidden="true"></span>
+        <span><b>Animaciones</b><small>Desactivalas si la tele o el celular van lentos.</small></span>
+      </button>
+      <h2>Historial</h2>
+      <button class="btn peligro" data-nav id="ajuste-historial">Borrar el historial de este perfil</button>
+      <h2>Acerca de Cinetream</h2>
+      <p class="acerca">Catálogo de películas abiertas de Blender Studio (licencias Creative Commons BY) y clásicos del cine en
+        dominio público. Los afiches son ilustraciones propias de Cinetream. Versión 0.2.</p>
+    </section>
   </main>
+
+  <div class="aviso-flotante" id="aviso" role="status" hidden></div>
 
   <section id="vista-reproductor" class="reproductor" hidden></section>
 
   <nav class="pestanas-movil" aria-label="Secciones">
-    <button data-ir="inicio" class="activo"><span aria-hidden="true">⌂</span>Inicio</button>
-    <button data-ir="buscar"><span aria-hidden="true">⌕</span>Buscar</button>
-    <button data-ir="lista"><span aria-hidden="true">＋</span>Mi lista</button>
-    <button data-ir="perfiles"><span class="avatar mini" id="avatar-movil"></span>Perfil</button>
+    <button data-ir="inicio" class="activo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 L12 4 L21 11 V20 H15 V14 H9 V20 H3 Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>Inicio</button>
+    <button data-ir="explorar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7.5" height="7.5" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>Explorar</button>
+    <button data-ir="buscar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15.5 15.5 L21 21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>Buscar</button>
+    <button data-ir="lista"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3 H18 V21 L12 16.5 L6 21 Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>Mi lista</button>
+    <button data-ir="ajustes"><span class="avatar mini avatar-actual"></span>Perfil</button>
   </nav>
 
   <script type="module" src="app.js"></script>

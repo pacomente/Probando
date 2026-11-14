@@ -7,14 +7,18 @@ o el dedo, y se puede instalar como app.
 
 | | |
 |---|---|
-| 👤 **Perfiles** | «¿Quién está mirando?» con perfiles Familia, Invitado y **Niños** (solo películas ATP). Cada perfil tiene su lista y su progreso. |
-| 🏠 **Inicio** | Portada con películas destacadas que rota sola, y filas: Seguir viendo, Mi lista, Animación, Ciencia ficción, Para toda la familia, Clásicos del cine mudo y más. |
-| 📄 **Ficha** | Sinopsis, año, duración, clasificación, dirección, licencia, «Seguir viendo» desde donde quedaste y «Más como esta». |
-| ▶ **Reproductor** | Controles que se esconden solos, barra de progreso, ±10 s con las flechas o doble toque a los costados, pantalla completa. Guarda por dónde ibas. |
-| 🔎 **Buscar** | Por título, director, género, año u origen. En la tele, con teclado en pantalla para escribir con el control. |
-| 📺 **Control remoto** | Flechas, OK y Volver, incluidas las teclas de Samsung (Tizen), LG (webOS) y Android TV, y las teclas de reproducción. |
-| 📱 **Celular** | Pestañas abajo, filas que se deslizan con el dedo y botón «atrás» del teléfono. |
-| 🎨 **Afiches propios** | Los afiches se dibujan en la app con los colores de cada película: no se usan imágenes con derechos de terceros. |
+| ✨ **Apertura** | Animación del logo al abrir (una vez por sesión; se saltea con cualquier tecla o toque). |
+| 👤 **Perfiles** | «¿Quién está mirando?» con hasta 5 perfiles. Se crean, se renombran, se elige color y cara, se marcan como **infantiles** (solo ATP) y se eliminan. Cada perfil tiene su lista y su progreso. |
+| 🏠 **Inicio** | Portada con fundido entre películas. **En la tele, la portada muestra la película que tenés marcada**, como en Google TV o Apple TV. Filas: Seguir viendo (apaisada, con lo que falta), Mi lista, **Las 10 imprescindibles** (con números grandes) y por género. |
+| 🧭 **Explorar** | Todo el catálogo por género, con cuántas películas tiene cada uno. |
+| 📄 **Ficha** | Estudio, sinopsis, duración, clasificación, dirección, licencia, «Seguir viendo» o «Desde el principio», Mi lista y «Más como esta». |
+| ▶ **Reproductor** | Controles que se esconden solos, barra de progreso, ±10 s, velocidad (0,75× a 2×), pantalla completa. **En pausa** muestra qué estás viendo y a qué hora termina. **A continuación**: al llegar a los créditos ofrece la siguiente película con cuenta regresiva. Guarda por dónde ibas. |
+| ⌨ **Atajos** | En la computadora: K pausa, J/L ±10 s, F pantalla completa, M silencio. |
+| 🔎 **Buscar** | Por título, director, género, año u origen, con sugerencias. En la tele, con teclado en pantalla. |
+| ⚙ **Ajustes** | Cambiar o editar el perfil, reproducción automática de la siguiente, animaciones y borrar el historial. |
+| 📺 **Control remoto** | Flechas, OK y Volver, incluidas las teclas de Samsung (Tizen), LG (webOS) y Android TV, y las de reproducción. Las filas recuerdan la última tarjeta marcada. |
+| 📱 **Celular** | Cinco pestañas abajo, filas que se deslizan con el dedo, doble toque a los costados del video para saltar 10 s y botón «atrás» del teléfono. |
+| 🎨 **Afiches propios** | Ilustraciones dibujadas por la app con los colores de cada película, con luz, viñeta y grano de película: no se usan imágenes con derechos de terceros. |
 
 ## El catálogo: solo contenido legal
 

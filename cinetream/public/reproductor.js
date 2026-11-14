@@ -19,6 +19,8 @@ function fuenteVideo(video, url) {
     get duration() { return Number.isFinite(video.duration) ? video.duration : 0; },
     get muted() { return video.muted; },
     set muted(m) { video.muted = m; },
+    get velocidad() { return video.playbackRate; },
+    set velocidad(v) { video.playbackRate = v; },
     destruir() { video.pause(); video.removeAttribute('src'); video.load(); },
   };
 }
@@ -31,11 +33,12 @@ function fuenteSimulada(canvas, pelicula, avisar) {
   let pausado = true;
   let ultimo = performance.now();
   let cuadro = null;
+  let velocidad = 1;
   const [fondo, acento] = pelicula.colores;
 
   function dibujar(ahora) {
     if (!pausado) {
-      tiempo = Math.min(duracion, tiempo + (ahora - ultimo) / 1000);
+      tiempo = Math.min(duracion, tiempo + ((ahora - ultimo) / 1000) * velocidad);
       if (tiempo >= duracion) { pausado = true; avisar('ended'); }
       avisar('timeupdate');
     }
@@ -91,6 +94,8 @@ function fuenteSimulada(canvas, pelicula, avisar) {
     get duration() { return duracion; },
     get muted() { return true; },
     set muted(_) {},
+    get velocidad() { return velocidad; },
+    set velocidad(v) { velocidad = v; },
     destruir() { cancelAnimationFrame(cuadro); },
   };
 }
@@ -104,12 +109,32 @@ const formato = (s) => {
   return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
 };
 
-export function abrirReproductor(contenedor, pelicula, { desde = 0, alGuardar, alSalir }) {
+const VELOCIDADES = [0.75, 1, 1.25, 1.5, 2];
+const SEGUNDOS_SIGUIENTE = 10;
+
+// siguiente: película que se ofrece al terminar; autoSiguiente: si arranca sola al terminar la cuenta regresiva
+export function abrirReproductor(contenedor, pelicula, { desde = 0, alGuardar, alSalir, siguiente = null, autoSiguiente = true, alSiguiente }) {
   contenedor.innerHTML = `
     <video class="rep-video" playsinline preload="metadata"></video>
     <canvas class="rep-canvas" hidden></canvas>
     <div class="rep-aviso" hidden></div>
     <div class="rep-icono" aria-hidden="true"></div>
+    <div class="rep-info-pausa" aria-hidden="true">
+      <span class="etiqueta">Estás viendo</span>
+      <b class="rep-info-titulo"></b>
+      <span class="rep-info-datos"></span>
+      <p class="rep-info-sinopsis"></p>
+      <span class="rep-info-fin"></span>
+    </div>
+    <div class="rep-siguiente" hidden>
+      <span class="etiqueta">A continuación</span>
+      <b class="rep-siguiente-titulo"></b>
+      <span class="rep-siguiente-cuenta"></span>
+      <div class="rep-siguiente-botones">
+        <button data-nav data-siguiente="ver" class="principal">▶ Ver ahora</button>
+        <button data-nav data-siguiente="cancelar">Seguir aquí</button>
+      </div>
+    </div>
     <div class="rep-capa">
       <div class="rep-arriba">
         <button class="rep-volver" data-nav aria-label="Volver">← Volver</button>
@@ -128,6 +153,7 @@ export function abrirReproductor(contenedor, pelicula, { desde = 0, alGuardar, a
           <button data-nav data-accion="play" class="rep-play" aria-label="Reproducir">▶</button>
           <button data-nav data-accion="adelantar" aria-label="Adelantar 10 segundos">10 ⟳</button>
           <span class="rep-espacio"></span>
+          <button data-nav data-accion="velocidad" class="rep-velocidad" aria-label="Velocidad de reproducción">1×</button>
           <button data-nav data-accion="sonido" aria-label="Silenciar">🔊</button>
           <button data-nav data-accion="pantalla" aria-label="Pantalla completa">⛶</button>
         </div>
@@ -136,6 +162,9 @@ export function abrirReproductor(contenedor, pelicula, { desde = 0, alGuardar, a
   const $ = (s) => contenedor.querySelector(s);
   $('.rep-titulo b').textContent = pelicula.titulo;
   $('.rep-titulo span').textContent = `${pelicula.anio} · ${pelicula.clasificacion}`;
+  $('.rep-info-titulo').textContent = pelicula.titulo;
+  $('.rep-info-datos').textContent = `${pelicula.anio} · ${pelicula.clasificacion} · ${pelicula.direccion}`;
+  $('.rep-info-sinopsis').textContent = pelicula.sinopsis;
   const video = $('.rep-video');
   const canvas = $('.rep-canvas');
   let fuente;
@@ -143,6 +172,9 @@ export function abrirReproductor(contenedor, pelicula, { desde = 0, alGuardar, a
   // Estado del reproductor: se declara antes de arrancar la fuente, que ya lo usa al empezar
   let temporizador = null; // para ocultar los controles
   let cerrado = false;
+  let infoPausa = null; // la información aparece tras unos segundos en pausa
+  let siguienteMostrado = false;
+  let cuentaSiguiente = null;
 
   const avisar = (evento) => manejar(evento);
   function usarSimulada(motivo) {
@@ -155,6 +187,7 @@ export function abrirReproductor(contenedor, pelicula, { desde = 0, alGuardar, a
     const aviso = $('.rep-aviso');
     aviso.hidden = false;
     aviso.textContent = motivo;
+    setTimeout(() => aviso.classList.add('oculto'), 7000); // se lee y se va
     fuente.play();
   }
 
@@ -187,18 +220,63 @@ export function abrirReproductor(contenedor, pelicula, { desde = 0, alGuardar, a
         $('.rep-cargado').style.width = `${(video.buffered.end(video.buffered.length - 1) / d) * 100}%`;
       }
       if (Math.abs(t - ultimoGuardado) >= 5) { ultimoGuardado = t; alGuardar(t, d); }
+      // Ya en los créditos: se ofrece la película siguiente
+      if (siguiente && !siguienteMostrado && d > 60 && t >= d - 15) mostrarSiguiente();
     }
     if (evento === 'play' || evento === 'pause' || evento === 'playing') {
       const pausado = fuente.paused;
       $('.rep-play').textContent = pausado ? '▶' : '❚❚';
       $('.rep-play').setAttribute('aria-label', pausado ? 'Reproducir' : 'Pausar');
       contenedor.classList.toggle('pausado', pausado);
+      clearTimeout(infoPausa);
+      contenedor.classList.remove('con-info');
+      if (pausado) {
+        infoPausa = setTimeout(() => {
+          const fin = new Date(Date.now() + ((fuente.duration - fuente.currentTime) / (fuente.velocidad || 1)) * 1000);
+          $('.rep-info-fin').textContent = `Termina a las ${fin.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}`;
+          contenedor.classList.add('con-info');
+        }, 4000);
+      }
       mostrarControles();
     }
     if (evento === 'waiting') contenedor.classList.add('cargando');
     if (evento === 'playing') contenedor.classList.remove('cargando');
-    if (evento === 'ended') { alGuardar(d, d); mostrarControles(); }
+    if (evento === 'ended') {
+      alGuardar(d, d);
+      if (siguiente && !siguienteMostrado) mostrarSiguiente();
+      mostrarControles();
+    }
   }
+
+  // ---------- A continuación ----------
+  function mostrarSiguiente() {
+    siguienteMostrado = true;
+    const caja = $('.rep-siguiente');
+    caja.hidden = false;
+    $('.rep-siguiente-titulo').textContent = siguiente.titulo;
+    let quedan = SEGUNDOS_SIGUIENTE;
+    const pintar = () => { $('.rep-siguiente-cuenta').textContent = autoSiguiente ? `Empieza en ${quedan} s` : `${siguiente.anio} · ${siguiente.duracionMin} min`; };
+    pintar();
+    if (autoSiguiente) {
+      cuentaSiguiente = setInterval(() => {
+        quedan--;
+        pintar();
+        if (quedan <= 0) irASiguiente();
+      }, 1000);
+    }
+    enfocar(caja.querySelector('[data-siguiente="ver"]'), { inicial: true });
+  }
+  function cancelarSiguiente() {
+    clearInterval(cuentaSiguiente);
+    $('.rep-siguiente').hidden = true;
+  }
+  function irASiguiente() {
+    clearInterval(cuentaSiguiente);
+    salir();
+    alSiguiente?.(siguiente);
+  }
+  contenedor.querySelector('[data-siguiente="ver"]').addEventListener('click', irASiguiente);
+  contenedor.querySelector('[data-siguiente="cancelar"]').addEventListener('click', cancelarSiguiente);
 
   function mostrarControles() {
     contenedor.classList.add('con-controles');
@@ -229,6 +307,13 @@ export function abrirReproductor(contenedor, pelicula, { desde = 0, alGuardar, a
     play: alternar,
     retroceder: () => saltar(-SALTO),
     adelantar: () => saltar(SALTO),
+    velocidad: () => {
+      const v = VELOCIDADES[(VELOCIDADES.indexOf(fuente.velocidad) + 1) % VELOCIDADES.length] ?? 1;
+      fuente.velocidad = v;
+      const texto = `${String(v).replace('.', ',')}×`;
+      contenedor.querySelector('[data-accion="velocidad"]').textContent = texto;
+      destello(texto);
+    },
     sonido: () => {
       fuente.muted = !fuente.muted;
       contenedor.querySelector('[data-accion="sonido"]').textContent = fuente.muted ? '🔇' : '🔊';
@@ -272,15 +357,28 @@ export function abrirReproductor(contenedor, pelicula, { desde = 0, alGuardar, a
   contenedor.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') mostrarControles(); });
 
   // Control remoto y teclado
+  // Atajos de computadora, como en los reproductores web habituales
+  const ATAJOS = { k: 'play', j: 'retroceder', l: 'adelantar', f: 'pantalla', m: 'sonido' };
   function tecla(e) {
+    const atajo = !e.ctrlKey && !e.metaKey && !e.altKey && ATAJOS[e.key?.toLowerCase()];
+    if (atajo) { e.preventDefault(); e.stopPropagation(); acciones[atajo](); mostrarControles(); return; }
     const accion = accionDeTecla(e);
     if (!accion) return;
     e.preventDefault();
     e.stopPropagation(); // el reproductor atiende sus teclas; la navegación general no se entera
+    if (accion === 'volver' && !$('.rep-siguiente').hidden) { cancelarSiguiente(); return; }
     if (accion === 'volver' || accion === 'detener') { salir(); return; }
     if (accion === 'playPausa') { alternar(); mostrarControles(); return; }
     if (accion === 'adelantar') { saltar(SALTO * 3); return; }
     if (accion === 'retroceder') { saltar(-SALTO * 3); return; }
+    // "A continuación" en pantalla: el control maneja esa tarjeta aunque los controles estén ocultos
+    const caja = $('.rep-siguiente');
+    if (!caja.hidden && ['ok', 'izquierda', 'derecha', 'arriba', 'abajo'].includes(accion)) {
+      if (!caja.contains(document.activeElement)) enfocar(caja.querySelector('[data-siguiente="ver"]'));
+      else if (accion === 'ok') document.activeElement.click();
+      else moverFoco(accion, caja);
+      return;
+    }
     if (!controlesVisibles()) {
       // Con los controles ocultos: izquierda/derecha saltan, OK pausa, cualquier otra muestra los controles
       if (accion === 'izquierda') saltar(-SALTO);
@@ -292,7 +390,9 @@ export function abrirReproductor(contenedor, pelicula, { desde = 0, alGuardar, a
     mostrarControles();
     if (document.activeElement === barra && (accion === 'izquierda' || accion === 'derecha')) { saltar(accion === 'derecha' ? SALTO : -SALTO); return; }
     if (accion === 'ok') { document.activeElement?.click(); return; }
-    moverFoco(accion, contenedor);
+    // Con "A continuación" en pantalla, las flechas se mueven entre sus botones
+    const siguienteCaja = $('.rep-siguiente');
+    moverFoco(accion, siguienteCaja.hidden ? contenedor : siguienteCaja);
   }
   document.addEventListener('keydown', tecla, true);
 
@@ -302,6 +402,8 @@ export function abrirReproductor(contenedor, pelicula, { desde = 0, alGuardar, a
     cerrado = true;
     document.removeEventListener('keydown', tecla, true);
     clearTimeout(temporizador);
+    clearTimeout(infoPausa);
+    clearInterval(cuentaSiguiente);
     fuente.destruir();
     if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
     contenedor.innerHTML = '';
