@@ -644,6 +644,8 @@ async function reproducir(id, desde) {
     }
   }
   let siguientePedida = null;
+  // Cuenta la reproducción para las estadísticas del administrador
+  if (conServidor) fetch('/api/vista', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id }), keepalive: true }).catch(() => {});
   const rep = abrirReproductor(contenedor, p, {
     desde: inicio,
     siguiente: siguienteDe(p),

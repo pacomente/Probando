@@ -3,7 +3,7 @@ import { afiche } from './carteles.js';
 
 const $ = (s, raiz = document) => raiz.querySelector(s);
 const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const tamano = (b) => (b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(1).replace('.', ',')} GB` : `${Math.max(1, Math.round(b / 1024 ** 2))} MB`);
+const tamano = (b) => (!b ? '0 MB' : b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(1).replace('.', ',')} GB` : `${Math.max(1, Math.round(b / 1024 ** 2))} MB`);
 
 async function api(ruta, opciones = {}) {
   const r = await fetch(`api/admin${ruta}`, {
@@ -32,6 +32,7 @@ let configurado = true;
 async function iniciar() {
   const estado = await api('/estado');
   configurado = estado.configurado;
+  estadoServidor = estado;
   aplicarLugar(estado);
   if (estado.sesion) mostrarPanel();
   else mostrarAcceso();
@@ -329,7 +330,7 @@ async function completarAutomatico(p) {
 }
 
 // ---------- Catálogo ----------
-let catalogo = { peliculas: [], trabajos: {}, espacio: 0 };
+let catalogo = { peliculas: [], trabajos: {}, espacio: 0, extra: {}, disco: null };
 const completadas = new Set();
 
 async function cargar() {
@@ -339,53 +340,122 @@ async function cargar() {
     const p = catalogo.peliculas.find((x) => x.id === id);
     if (t.estado === 'listo' && p && !completadas.has(id)) {
       completadas.add(id);
-      completarAutomatico(p).then(() => { avisar(`«${p.titulo}» está lista. Revisala y publicala.`); cargar(); });
+      if (t.tipo === 'guardar') avisar(`«${p.titulo}» ya está guardada en el servidor`);
+      else completarAutomatico(p).then(() => { avisar(`«${p.titulo}» está lista. Revisala y publicala.`); cargar(); });
     }
   }
   pintar();
 }
 
+// Dónde está el video de cada película
+const esLink = (v) => /^https?:\/\//i.test(v || '');
+const sitio = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return 'otro sitio'; } };
+function origenDe(p) {
+  const x = catalogo.extra[p.id] || {};
+  if (!p.video) return { clase: 'origen-ninguno', texto: 'Sin video: se ve una señal de prueba' };
+  if (p.video.startsWith('videos/')) return { clase: 'origen-servidor', texto: `Guardada en ${enInternet ? 'el servidor' : 'esta PC'} · ${tamano(x.bytes || 0)}` };
+  if (x.enlace?.ok === false) return { clase: 'origen-caido', texto: `Link caído · ${sitio(p.video)}`, detalle: x.enlace.detalle };
+  return { clase: 'origen-link', texto: `Desde un link · ${sitio(p.video)} · no ocupa lugar` };
+}
+
+function barraDisco(d) {
+  if (!d) return '';
+  const usado = d.videos + d.portadas + d.anuncios;
+  if (!d.total) return `<p class="nota">Cinetream ocupa ${tamano(usado)} (videos ${tamano(d.videos)}, portadas ${tamano(d.portadas)}, publicidad ${tamano(d.anuncios)}).</p>`;
+  const pct = (n) => `${Math.max(0.4, (n / d.total) * 100)}%`;
+  const otros = Math.max(0, d.total - d.libre - usado);
+  const ocupado = (d.total - d.libre) / d.total;
+  return `<div class="disco ${ocupado > 0.9 ? 'disco-lleno' : ''}">
+    <div class="disco-barra" role="img" aria-label="Disco: ${tamano(d.libre)} libres de ${tamano(d.total)}">
+      <i class="d-videos" style="width:${pct(d.videos)}"></i><i class="d-portadas" style="width:${pct(d.portadas + d.anuncios)}"></i><i class="d-otros" style="width:${pct(otros)}"></i>
+    </div>
+    <div class="disco-leyenda">
+      <span><i class="d-videos"></i>Videos ${tamano(d.videos)}</span>
+      <span><i class="d-portadas"></i>Portadas y publicidad ${tamano(d.portadas + d.anuncios)}</span>
+      <span><b>${tamano(d.libre)} libres</b> de ${tamano(d.total)}</span>
+    </div>
+    ${ocupado > 0.9 ? '<p class="error">El disco está casi lleno. Pasá películas a «desde un link» con «Liberar espacio» o ampliá el disco.</p>' : ''}
+  </div>`;
+}
+
 function pintar() {
   const ps = catalogo.peliculas;
   const cuenta = (e) => ps.filter((p) => p.estado === e).length;
+  const enServidor = ps.filter((p) => p.video?.startsWith('videos/'));
+  const conLink = ps.filter((p) => esLink(p.video));
+  const caidos = conLink.filter((p) => catalogo.extra[p.id]?.enlace?.ok === false).length;
   $('#resumen').innerHTML = [
-    ['Publicadas', cuenta('publicada')],
-    ['Ocultas', cuenta('oculta')],
-    ['Descargando', cuenta('descargando')],
-    ['Espacio en videos', tamano(catalogo.espacio)],
-  ].map(([t, v]) => `<div class="dato"><b>${esc(v)}</b><span>${esc(t)}</span></div>`).join('');
+    ['Publicadas', cuenta('publicada'), cuenta('oculta') ? `${cuenta('oculta')} ocultas` : ''],
+    ['Desde un link', conLink.length, caidos ? `${caidos} con el link caído` : 'no ocupan lugar en el disco'],
+    ['Guardadas en el servidor', enServidor.length, tamano(catalogo.espacio)],
+    ['Descargando', cuenta('descargando') + Object.values(catalogo.trabajos).filter((t) => t.tipo === 'guardar' && t.estado === 'descargando').length, ''],
+  ].map(([t, v, d]) => dato(t, v, d)).join('');
+  $('#almacenamiento').innerHTML = `<p class="nota"><b>Desde un link:</b> el video no se guarda en ${enInternet ? 'el servidor' : 'esta PC'}; se reproduce directo desde el sitio original
+    (por ejemplo archive.org). En Cinetream solo quedan la ficha y la portada. <b>Guardada:</b> el archivo entero está en el disco.</p>${barraDisco(catalogo.disco)}`;
 
   const texto = $('#filtro-texto').value.trim().toLowerCase();
-  const estado = $('#filtro-estado').value;
-  const lista = ps.filter((p) => (!estado || p.estado === estado) && (!texto || `${p.titulo} ${p.direccion}`.toLowerCase().includes(texto)));
+  const filtro = $('#filtro-estado').value;
+  const FILTROS = {
+    servidor: (p) => p.video?.startsWith('videos/'),
+    link: (p) => esLink(p.video),
+    caido: (p) => esLink(p.video) && catalogo.extra[p.id]?.enlace?.ok === false,
+  };
+  const pasa = FILTROS[filtro] || ((p) => !filtro || p.estado === filtro);
+  const lista = ps.filter((p) => pasa(p) && (!texto || `${p.titulo} ${p.direccion} ${(p.generos || []).join(' ')}`.toLowerCase().includes(texto)));
+  const orden = $('#filtro-orden').value;
+  const x = (p) => catalogo.extra[p.id] || {};
+  if (orden === 'vistas') lista.sort((a, b) => (x(b).vistas?.total || 0) - (x(a).vistas?.total || 0));
+  if (orden === 'titulo') lista.sort((a, b) => a.titulo.localeCompare(b.titulo, 'es'));
+  if (orden === 'tamano') lista.sort((a, b) => (x(b).bytes || 0) - (x(a).bytes || 0));
   const ESTADOS = { publicada: 'Publicada', oculta: 'Oculta', descargando: 'Descargando', error: 'Error' };
   $('#catalogo').innerHTML = lista.length ? lista.map((p) => {
     const t = catalogo.trabajos[p.id];
-    const origen = !p.video ? 'Sin archivo (señal de prueba)' : p.video.startsWith('videos/') ? (enInternet ? 'Guardada en el servidor' : 'Archivo en esta PC') : 'Desde un link';
-    const avance = p.estado === 'descargando' && t
-      ? `<div class="progreso-subida"><i style="width:${t.total ? (t.bytes / t.total) * 100 : 3}%"></i><span>${tamano(t.bytes)}${t.total ? ` de ${tamano(t.total)}` : ''}</span></div>` : '';
+    const o = origenDe(p);
+    const v = x(p).vistas || { total: 0, recientes: 0 };
+    const guardando = t?.tipo === 'guardar' && t.estado === 'descargando';
+    const bajando = (p.estado === 'descargando' || guardando) && t;
+    const avance = bajando
+      ? `<div class="progreso-subida"><i style="width:${t.total ? (t.bytes / t.total) * 100 : 3}%"></i><span>${guardando ? 'Guardando en el servidor: ' : ''}${tamano(t.bytes)}${t.total ? ` de ${tamano(t.total)}` : ''}</span></div>` : '';
+    const acciones = [];
+    if (p.estado === 'descargando' || guardando) acciones.push('<button class="btn" data-accion="cancelar">Cancelar</button>');
+    else {
+      acciones.push('<button class="btn" data-accion="editar">Editar</button>');
+      if (p.estado !== 'error') acciones.push(`<button class="btn" data-accion="${p.estado === 'publicada' ? 'ocultar' : 'publicar'}">${p.estado === 'publicada' ? 'Ocultar' : 'Publicar'}</button>`);
+      if (esLink(p.video)) acciones.push('<button class="btn" data-accion="guardar" title="Baja el video al disco: se ve aunque el link deje de funcionar">Guardar en el servidor</button>');
+      if (p.video?.startsWith('videos/') && esLink(p.videoOriginal)) acciones.push('<button class="btn" data-accion="liberar" title="Borra el archivo y vuelve a reproducirse desde el link original">Liberar espacio</button>');
+    }
+    acciones.push('<button class="btn peligro" data-accion="eliminar">Eliminar</button>');
     return `<li class="fila-peli" data-id="${esc(p.id)}">
       <div class="fila-afiche">${afiche(p)}</div>
       <div class="fila-datos">
-        <b>${esc(p.titulo)}</b>
+        <b>${esc(p.titulo)}${p.plus ? ' <span class="sello-mini">Plus</span>' : ''}${p.destacada ? ' <span class="sello-mini sello-destacada">Destacada</span>' : ''}</b>
         <span>${esc([p.anio, p.duracionMin ? `${p.duracionMin} min` : null, p.clasificacion, p.direccion].filter(Boolean).join(' · '))}</span>
-        <span class="nota">${esc(origen)}${p.destacada ? ' · Destacada' : ''}</span>
+        <span class="origen ${o.clase}" ${o.detalle ? `title="${esc(o.detalle)}"` : ''}>${esc(o.texto)}${o.detalle ? ` — ${esc(o.detalle)}` : ''}</span>
+        <span class="nota">${v.total ? `${v.total.toLocaleString('es-AR')} reproducciones${v.recientes ? ` · ${v.recientes.toLocaleString('es-AR')} en 30 días` : ''}` : 'Sin reproducciones todavía'}</span>
         ${t?.error ? `<span class="error">${esc(t.error)}</span>` : ''}
         ${avance}
       </div>
       <span class="estado estado-${esc(p.estado)}">${ESTADOS[p.estado] || p.estado}</span>
-      <div class="fila-acciones">
-        ${p.estado === 'descargando'
-    ? '<button class="btn" data-accion="cancelar">Cancelar</button>'
-    : `<button class="btn" data-accion="editar">Editar</button>
-           ${p.estado !== 'error' ? `<button class="btn" data-accion="${p.estado === 'publicada' ? 'ocultar' : 'publicar'}">${p.estado === 'publicada' ? 'Ocultar' : 'Publicar'}</button>` : ''}`}
-        <button class="btn peligro" data-accion="eliminar">Eliminar</button>
-      </div>
+      <div class="fila-acciones">${acciones.join('')}</div>
     </li>`;
   }).join('') : '<li class="vacio"><b>No hay películas con ese filtro</b></li>';
 }
 $('#filtro-texto').addEventListener('input', pintar);
 $('#filtro-estado').addEventListener('change', pintar);
+$('#filtro-orden').addEventListener('change', pintar);
+$('#revisar-links').addEventListener('click', async (e) => {
+  const b = e.currentTarget;
+  b.disabled = true;
+  b.textContent = 'Revisando…';
+  try {
+    const r = await enviar('/enlaces/revisar', 'POST', {});
+    avisar(!r.revisados ? 'No hay películas desde un link' : r.caidos ? `${r.caidos} de ${r.revisados} links no funcionan` : `Los ${r.revisados} links funcionan`);
+    if (r.caidos) $('#filtro-estado').value = 'caido';
+    await cargar();
+  } catch (err) { avisar(err.message); }
+  b.disabled = false;
+  b.textContent = 'Revisar links';
+});
 
 const confirmar = new Map();
 $('#catalogo').addEventListener('click', async (e) => {
@@ -399,6 +469,23 @@ $('#catalogo').addEventListener('click', async (e) => {
       case 'publicar': await enviar(`/peliculas/${id}`, 'PUT', { datos: { estado: 'publicada' } }); avisar(`«${p.titulo}» ya se ve en la plataforma`); break;
       case 'ocultar': await enviar(`/peliculas/${id}`, 'PUT', { datos: { estado: 'oculta' } }); avisar(`«${p.titulo}» se ocultó`); break;
       case 'cancelar': await enviar(`/peliculas/${id}/cancelar`, 'POST', {}); break;
+      case 'guardar':
+        await enviar(`/peliculas/${id}/guardar`, 'POST', {});
+        completadas.delete(id);
+        avisar(`Guardando «${p.titulo}» en el servidor. Mientras tanto se sigue viendo desde el link.`);
+        break;
+      case 'liberar':
+        if (!confirmar.has(`l-${id}`)) {
+          boton.textContent = '¿Liberar? Clic de nuevo';
+          confirmar.set(`l-${id}`, setTimeout(() => { confirmar.delete(`l-${id}`); boton.textContent = 'Liberar espacio'; }, 4000));
+          return;
+        }
+        clearTimeout(confirmar.get(`l-${id}`));
+        confirmar.delete(`l-${id}`);
+        boton.textContent = 'Revisando el link…';
+        await enviar(`/peliculas/${id}/liberar`, 'POST', {});
+        avisar(`«${p.titulo}» ahora se ve desde el link y se liberó su espacio`);
+        break;
       case 'eliminar':
         // Se confirma con un segundo clic
         if (!confirmar.has(id)) {
@@ -503,7 +590,7 @@ const dato = (titulo, valor, detalle = '') => `<div class="dato"><b>${esc(valor)
 document.querySelectorAll('[data-seccion]').forEach((b) => b.addEventListener('click', () => {
   document.querySelectorAll('[data-seccion]').forEach((x) => { x.classList.toggle('activa', x === b); x.setAttribute('aria-selected', String(x === b)); });
   document.querySelectorAll('.seccion').forEach((sec) => { sec.hidden = sec.id !== `seccion-${b.dataset.seccion}`; });
-  ({ negocio: cargarNegocio, catalogo: cargar, suscriptores: cargarCuentas, publicidad: cargarPublicidad, planes: cargarPlanes })[b.dataset.seccion]?.();
+  ({ negocio: cargarNegocio, catalogo: cargar, suscriptores: cargarCuentas, publicidad: cargarPublicidad, planes: cargarPlanes, ajustes: cargarAjustes })[b.dataset.seccion]?.();
 }));
 
 // ---------- Resumen del negocio ----------
@@ -513,8 +600,10 @@ async function cargarNegocio() {
   const plus = (negocio.porPlan.plus || 0) + (negocio.porPlan['plus-anual'] || 0);
   const p = negocio.publicidad;
   $('#negocio-prueba').hidden = !negocio.modoPrueba;
+  const vistas30 = negocio.vistasPorDia.reduce((a, d) => a + d.n, 0);
   $('#negocio-datos').innerHTML = [
     dato('Suscriptores Plus', plus, `de ${negocio.cuentas} cuentas`),
+    dato('Reproducciones', vistas30.toLocaleString('es-AR'), 'últimos 30 días'),
     dato('Cuentas nuevas', negocio.nuevas30, 'últimos 30 días'),
     dato('Ingreso mensual estimado', pesos(negocio.ingresoMensual), negocio.modoPrueba ? 'con pagos de prueba' : 'planes vigentes'),
     dato('Avisos mostrados', p.impresiones.toLocaleString('es-AR'), `${negocio.campanasActivas} campañas activas`),
@@ -525,6 +614,18 @@ async function cargarNegocio() {
     const n = negocio.porPlan[pl.id] || 0;
     return `<div class="barra-plan"><span>${esc(pl.nombre)}</span><div><i style="width:${(n / total) * 100}%"></i></div><b>${n}</b></div>`;
   }).join('') || '<p class="nota">Todavía no hay cuentas.</p>';
+
+  // Reproducciones por día: columnas con el valor al pasar el mouse
+  const maximo = Math.max(1, ...negocio.vistasPorDia.map((d) => d.n));
+  const diaCorto = (d) => new Date(`${d}T12:00:00`).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
+  $('#negocio-grafico').setAttribute('aria-label', `Reproducciones por día: ${vistas30} en 30 días`);
+  $('#negocio-grafico').innerHTML = `<div class="columnas">${negocio.vistasPorDia.map((d) => `<i style="height:${Math.max(2, (d.n / maximo) * 100)}%" class="${d.n ? '' : 'vacia'}" title="${esc(diaCorto(d.dia))}: ${d.n} reproducciones"></i>`).join('')}</div>
+    <div class="ejes"><span>${esc(diaCorto(negocio.vistasPorDia[0].dia))}</span><span>máximo ${maximo === 1 && !vistas30 ? 0 : maximo} por día</span><span>Hoy</span></div>`;
+  $('#negocio-mas-vistas').innerHTML = negocio.masVistas.length
+    ? negocio.masVistas.map((p) => `<li><span>${esc(p.titulo)} <small>${esc(p.anio)}</small></span><b>${p.recientes.toLocaleString('es-AR')}</b></li>`).join('')
+    : '<li class="nota">Todavía nadie vio películas este mes.</li>';
+  $('#negocio-disco').innerHTML = barraDisco(negocio.disco)
+    + `<p class="nota">${negocio.catalogo.desdeLink} películas desde un link (no ocupan lugar) · ${negocio.catalogo.enServidor} guardadas en el servidor${negocio.catalogo.linksCaidos ? ` · <b class="error">${negocio.catalogo.linksCaidos} con el link caído</b>` : ''}</p>`;
 }
 
 // ---------- Suscriptores ----------
@@ -712,9 +813,62 @@ $('#planes-form').addEventListener('submit', async (e) => {
   try { await enviar('/planes', 'PUT', { planes }); avisar('Planes guardados'); await cargarPlanes(); } catch (err) { avisar(err.message); }
 });
 
+// ---------- Seguridad ----------
+const sesionesCerradas = (n) => (n === 1 ? 'Se cerró 1 sesión en otro equipo' : `Se cerraron ${n} sesiones en otros equipos`);
+let estadoServidor = {};
+function fuerzaClave(c) {
+  let puntos = 0;
+  if (c.length >= 10) puntos++;
+  if (c.length >= 14) puntos++;
+  if (/[a-z]/.test(c) && /[A-Z]/.test(c)) puntos++;
+  if (/\d/.test(c)) puntos++;
+  if (/[^A-Za-z0-9]/.test(c)) puntos++;
+  return Math.min(4, puntos);
+}
+$('#clave-form [name="nueva"]').addEventListener('input', (e) => {
+  const f = e.target.value ? fuerzaClave(e.target.value) : -1;
+  const m = $('#clave-medidor');
+  m.dataset.nivel = f;
+  m.querySelector('span').textContent = ['Muy débil', 'Débil', 'Aceptable', 'Buena', 'Muy buena'][f] || '';
+});
+$('#clave-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.currentTarget;
+  const f = form.elements;
+  $('#clave-error').textContent = '';
+  if (f.nueva.value !== f.repetir.value) { $('#clave-error').textContent = 'Las contraseñas nuevas no coinciden.'; return; }
+  if (fuerzaClave(f.nueva.value) < 2) { $('#clave-error').textContent = 'Elegí una contraseña más fuerte: más larga, con números o símbolos.'; return; }
+  try {
+    const r = await enviar('/clave', 'POST', { actual: f.actual.value, nueva: f.nueva.value });
+    form.reset();
+    $('#clave-medidor').dataset.nivel = -1;
+    avisar(`Contraseña cambiada${r.cerradas ? `. ${sesionesCerradas(r.cerradas)}` : ''}`);
+  } catch (err) { $('#clave-error').textContent = err.message; }
+});
+$('#cerrar-sesiones').addEventListener('click', async () => {
+  try {
+    const r = await enviar('/sesiones/cerrar', 'POST', {});
+    avisar(r.cerradas ? sesionesCerradas(r.cerradas) : 'No había otras sesiones abiertas');
+  } catch (err) { avisar(err.message); }
+});
+async function cargarAjustes() {
+  const [n, c] = await Promise.all([api('/resumen'), api('/catalogo')]);
+  const d = n.disco;
+  const filas = [
+    ['Dónde corre', estadoServidor.enInternet ? `En internet${estadoServidor.render ? ' (Render)' : ''}` : 'En esta PC'],
+    ['Dirección', estadoServidor.direccion || location.origin],
+    ['Cobros', n.modoPrueba ? 'Modo prueba (no se cobra)' : 'Mercado Pago conectado'],
+    ['Películas', `${c.peliculas.length} en total · ${n.catalogo.publicadas} publicadas`],
+    ['Cuentas', `${n.cuentas}`],
+    ['Disco', d.total ? `${tamano(d.libre)} libres de ${tamano(d.total)}` : `${tamano(d.videos + d.portadas + d.anuncios)} usados`],
+  ];
+  $('#ficha-servidor').innerHTML = filas.map(([t, v]) => `<dt>${esc(t)}</dt><dd>${esc(v)}</dd>`).join('');
+}
+
 // Mientras haya descargas, el avance se actualiza solo
 setInterval(() => {
-  if (!$('#panel').hidden && catalogo.peliculas.some((p) => p.estado === 'descargando')) cargar().catch(() => {});
+  const activas = catalogo.peliculas.some((p) => p.estado === 'descargando') || Object.values(catalogo.trabajos).some((t) => t.estado === 'descargando');
+  if (!$('#panel').hidden && activas) cargar().catch(() => {});
 }, 1500);
 
 iniciar().catch(() => {
