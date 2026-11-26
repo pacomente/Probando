@@ -229,3 +229,4 @@ body.admin { font-size: 15px; min-height: 100vh; }
 .pasos-r2 summary { cursor: pointer; font-weight: 600; margin-bottom: 0.6rem; }
 .pasos-r2[open] summary { margin-bottom: 0.8rem; }
 #r2-datos .resumen { margin: 0.4rem 0 0.8rem; }
+.origen-embed::before { background: #c084fc; }

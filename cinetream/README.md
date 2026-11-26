@@ -59,11 +59,30 @@ derechos de cada película que se agrega.
 Los datos quedan en la carpeta `datos/` (catálogo, portadas y contraseña) y los videos en `videos/`: conviene hacer
 copias de seguridad de las dos.
 
+### Películas con el reproductor de otro sitio (YouTube, Vimeo, páginas con reproductor)
+
+Se puede pegar el link de una página que ya tiene su propio reproductor y la película se ve **dentro de Cinetream con
+ese reproductor**, sin descargar nada:
+
+| Link | Qué hace Cinetream |
+|---|---|
+| **YouTube** (`youtube.com/watch?v=…`, `youtu.be/…`, Shorts) | Usa el reproductor oficial de YouTube; trae título, canal y portada. Si el dueño no permite verlo en otras páginas, avisa. |
+| **Vimeo, Dailymotion** | Usa su reproductor oficial y trae los datos. |
+| **Google Drive** (link de «Compartir» de un video) | Usa la vista previa de Drive (el archivo tiene que estar compartido con «Cualquier persona con el link»). |
+| **Cualquier otra página con reproductor** | Busca el reproductor dentro de la página y muestra solo ese. Si no encuentra uno, muestra la página entera (avisa antes). Si la página prohíbe mostrarse dentro de otra, avisa. |
+| Netflix, Disney+, Prime Video y otras plataformas pagas | No se puede: protegen sus películas para que solo se vean en su app. |
+
+Así **no se pagan almacenamiento ni tráfico**: el video lo sirve el otro sitio. Si el sitio lo borra o deja de permitirlo,
+«Revisar links» lo marca. Lo que se publique tiene que ser legal (propio, con licencia o permitido por su dueño): la tilde
+de derechos sigue siendo obligatoria. En la tele, «Volver» o el botón atrás cierran el reproductor; con la flecha abajo
+el control pasa al reproductor del sitio (pausa, adelantar).
+
 ### ¿Dónde queda guardada cada película?
 
 | Cómo se agregó | Qué se guarda en el servidor | Qué pasa si el sitio original la borra |
 |---|---|---|
 | **Desde un link** («Reproducir desde el link») | Solo la ficha y la portada (unos KB). El video se reproduce directo desde el sitio original, sin pasar por el servidor. | Deja de verse. «Revisar links» lo detecta. |
+| **Con el reproductor de otro sitio** (YouTube, Vimeo…) | Solo la ficha y la portada. | Deja de verse. «Revisar links» lo detecta. |
 | **Guardada** («Guardarla en Cinetream» o subida) | El archivo entero, en el disco del servidor. | Se sigue viendo. |
 
 En el catálogo del administrador cada película muestra dónde está su video y cuánto ocupa, y se puede pasar de una forma a

@@ -9,7 +9,7 @@ import {
   actualizarPelicula, adminConfigurado, agregarPelicula, buscarPelicula, CARPETA_PORTADAS, CARPETA_VIDEOS,
   claveCorrecta, definirClave, quitarPelicula, todas,
 } from './datos.js';
-import { analizar, descargar, ErrorImportar } from './importar.js';
+import { analizar, descargar, ErrorImportar, revisarReproductor } from './importar.js';
 import { activarPlan, buscarCuenta, guardarCuentas, guardarPlanes, listaPlanes, planEfectivo, todasLasCuentas } from './cuentas.js';
 import { actualizarCampana, buscarCampana, campanas, CARPETA_PIEZAS, crearCampana, ponerPieza, quitarCampana } from './publicidad.js';
 import { modoPrueba } from './pagos.js';
@@ -250,7 +250,7 @@ export async function rutasAdmin(req, res, url) {
         extra[p.id] = {
           bytes: local ? (await stat(path.join(CARPETA_VIDEOS, p.video.slice(7))).catch(() => ({ size: 0 }))).size : enR2(p.video) ? p.tamano : 0,
           vistas: vistas(p.id),
-          enlace: esExterno(p.video) ? estadoEnlace(p.id) : null,
+          enlace: esExterno(p.video) || p.embed ? estadoEnlace(p.id) : null,
         };
       }
       return json(res, 200, {
@@ -285,11 +285,11 @@ export async function rutasAdmin(req, res, url) {
 
     // Revisa que los videos «desde link» sigan funcionando (de a 4 por vez)
     if (ruta === '/enlaces/revisar' && req.method === 'POST') {
-      const conLink = todas().filter((p) => esExterno(p.video));
+      const conLink = todas().filter((p) => esExterno(p.video) || p.embed);
       const resultados = {};
       for (let i = 0; i < conLink.length; i += 4) {
         await Promise.all(conLink.slice(i, i + 4).map(async (p) => {
-          const r = await revisarEnlace(p.video);
+          const r = p.embed ? await revisarReproductor(p.embed) : await revisarEnlace(p.video);
           guardarEnlace(p.id, r);
           resultados[p.id] = r;
         }));
@@ -341,7 +341,13 @@ export async function rutasAdmin(req, res, url) {
     if (ruta === '/importar' && req.method === 'POST') {
       const { info, datos, modo, derechos } = await leerJSON(req);
       if (!derechos) return json(res, 400, { error: 'Confirmá que tenés derecho a publicar esta película.' });
-      if (!info?.video) return json(res, 400, { error: 'Primero buscá el link.' });
+      if (!info?.video && !info?.embed) return json(res, 400, { error: 'Primero buscá el link.' });
+      if (info.embed) {
+        // Con el reproductor del otro sitio no se descarga nada: solo la portada
+        const p = agregarPelicula({ ...datos, video: null, embed: info.embed, fuente: info.fuente || info.embed, estado: 'descargando' });
+        importar(p, { ...info, video: null, publicar: Boolean(datos?.publicar) }, 'link');
+        return json(res, 200, { pelicula: p });
+      }
       const p = agregarPelicula({ ...datos, video: modo === 'link' ? info.video : null, fuente: info.fuente || info.video, estado: 'descargando' });
       if (modo === 'r2' && !r2Configurado()) return json(res, 400, { error: 'Cloudflare R2 no está configurado.' });
       importar(p, { ...info, publicar: Boolean(datos?.publicar) }, ['descargar', 'r2'].includes(modo) ? modo : 'link');
@@ -468,8 +474,8 @@ export async function rutasAdmin(req, res, url) {
           publicadas: todas().filter((p) => p.estado === 'publicada').length,
           enServidor: todas().filter((p) => p.video?.startsWith('videos/')).length,
           enR2: todas().filter((p) => enR2(p.video)).length,
-          desdeLink: todas().filter((p) => esExterno(p.video)).length,
-          linksCaidos: todas().filter((p) => esExterno(p.video) && estadoEnlace(p.id)?.ok === false).length,
+          desdeLink: todas().filter((p) => esExterno(p.video) || p.embed).length,
+          linksCaidos: todas().filter((p) => (esExterno(p.video) || p.embed) && estadoEnlace(p.id)?.ok === false).length,
         },
       });
     }

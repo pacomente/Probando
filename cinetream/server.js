@@ -85,7 +85,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/catalogo') {
       const plus = planEfectivo(cuentaDe(req)).plus;
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEGURIDAD });
-      return res.end(JSON.stringify({ peliculas: publicadas().map(({ fuente, estado, videoOriginal, tamano, ...p }) => (p.plus && !plus ? { ...p, video: null, bloqueada: true }
+      return res.end(JSON.stringify({ peliculas: publicadas().map(({ fuente, estado, videoOriginal, tamano, ...p }) => (p.plus && !plus ? { ...p, video: null, embed: null, bloqueada: true }
         : /^r2:/.test(p.video) ? { ...p, video: `r2/${p.id}` } : p)) }));
     }
     // Cuenta, planes, pagos y publicidad
