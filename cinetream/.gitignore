@@ -2,3 +2,13 @@ videos/*
 !videos/LEEME.txt
 datos/
 node_modules/
+descargas/*
+!descargas/LEEME.txt
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/firma.properties
+*.jks
+*.keystore
+!android/firma-prueba.jks

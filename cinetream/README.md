@@ -20,6 +20,7 @@ o el dedo, y se puede instalar como app.
 | 📱 **Celular** | Cinco pestañas abajo, filas que se deslizan con el dedo, doble toque a los costados del video para saltar 10 s y botón «atrás» del teléfono. |
 | 💳 **Planes** | Gratis con publicidad, Plus y Plus anual. Cuenta propia, ingreso en la tele con un código desde el celular, cobro con Mercado Pago. |
 | 📢 **Publicidad** | Avisos antes de la película (se saltan a los pocos segundos) y banners en el inicio, con estadísticas por campaña. |
+| 📲 **Apps para Android** | APK para celular y para la tele (Android TV / Google TV): aparece en el inicio, se maneja con el control, encuentra sola el servidor en la wifi y trae una demostración adentro. |
 | 🎨 **Afiches propios** | Ilustraciones dibujadas por la app con los colores de cada película, con luz, viñeta y grano de película: no se usan imágenes con derechos de terceros. |
 
 ## Administrador: cómo agregar películas
@@ -142,6 +143,63 @@ Vienen dos campañas propias que invitan a pasarse a Plus; se pueden pausar o ed
 La primera pantalla del administrador muestra suscriptores Plus, cuentas nuevas del mes, ingreso mensual estimado,
 avisos mostrados y clics, y cómo se reparten las cuentas entre los planes.
 
+## Apps para Android (celular y tele)
+
+En `android/` está la app nativa. De un mismo código salen dos APK:
+
+| APK | Para | Detalles |
+|---|---|---|
+| `cinetream-celular.apk` | Celulares y tablets con Android 6 o más nuevo | Pantalla completa al ver películas, botón «atrás» del teléfono. |
+| `cinetream-tele.apk` | Android TV, Google TV, Chromecast con Google TV, TV Box | Aparece en el inicio de la tele con su banner, se maneja con el control remoto. |
+
+Se pueden instalar las dos en el mismo equipo. La app:
+
+- Abre la plataforma del servidor de Cinetream. **La primera vez**, tocá **Buscar en mi wifi** y encuentra sola la PC
+  donde corre Cinetream; también se puede escribir la dirección (por ejemplo `192.168.0.10:3500` o `cine.tudominio.com`).
+- Sin servidor muestra la **demostración**, que viene adentro de la app.
+- Si el servidor no responde, ofrece reintentar, buscar de nuevo o cambiar la dirección.
+- Mantiene la pantalla encendida mientras se ve una película, y los links de los anunciantes se abren en el navegador.
+- El servidor se cambia después en Perfil → Ajustes → Servidor de Cinetream.
+
+### Cómo conseguir los APK
+
+- **Desde GitHub (sin instalar nada):** cada cambio en `cinetream/` compila las dos apps solas (*Actions*) y las publica en
+  **Releases** del repositorio. Se bajan directo desde el celular.
+- **En tu PC:** con el [Android SDK](https://developer.android.com/studio) instalado:
+
+  ```bash
+  cd android
+  ./compilar.sh                              # la app pregunta o busca el servidor
+  ./compilar.sh https://cine.tudominio.com   # la app abre directo tu servidor
+  ```
+
+  Los APK quedan en `descargas/` y se ofrecen desde **http://tu-PC:3500/descargar.html** (también hay un botón en Ajustes).
+
+### Instalar en la tele
+
+1. En la tele, desde Google Play, instalá la app gratuita **Downloader**.
+2. Abrila y escribí `tu-PC:3500/descargas/cinetream-tele.apk` (o el link de Releases de GitHub).
+3. Aceptá instalar apps de origen desconocido para Downloader. Cinetream aparece en el inicio de la tele.
+
+También se puede copiar el APK a un pendrive y abrirlo con un administrador de archivos de la tele.
+
+### Firma de las apps
+
+Para que una versión nueva se instale encima de la anterior, todas tienen que estar firmadas con la misma clave.
+El repositorio trae `android/firma-prueba.jks`, una clave **de prueba y pública**: sirve para probar, no para publicar.
+Para publicar en Google Play o repartir la app en serio, creá tu clave y guardala en un lugar seguro:
+
+```bash
+keytool -genkeypair -keystore cinetream.jks -alias cinetream -keyalg RSA -keysize 2048 -validity 10000
+```
+
+- **En tu PC:** creá `android/firma.properties` con `archivo=/ruta/cinetream.jks`, `clave=...` y `alias=cinetream`.
+- **En GitHub:** en *Settings → Secrets and variables → Actions* cargá los secretos `CINETREAM_FIRMA_BASE64`
+  (el archivo en base64: `base64 -w0 cinetream.jks`), `CINETREAM_FIRMA_CLAVE` y `CINETREAM_FIRMA_ALIAS`.
+  Con la variable `CINETREAM_SERVIDOR` (por ejemplo `https://cine.tudominio.com`) la app abre directo tu servidor.
+
+Al pasar de la clave de prueba a la tuya hay que desinstalar una vez la app vieja.
+
 ## Para un servicio comercial
 
 Esto es la plataforma (la parte que ve el público). Para venderla como servicio falta:
@@ -151,7 +209,8 @@ Esto es la plataforma (la parte que ve el público). Para venderla como servicio
   Bunny Stream) con calidad adaptable (HLS), en lugar de archivos sueltos.
 - **Facturación** (AFIP) de las suscripciones y la publicidad.
 - **Base de datos** (por ejemplo PostgreSQL) si se pasa de unos miles de cuentas: hoy se guardan en `datos/cuentas.json`.
-- **Apps de las tiendas** de Samsung, LG o Google TV: se arman empaquetando esta misma web con las herramientas de cada marca.
+- **Apps de Samsung (Tizen) y LG (webOS)**: se arman empaquetando esta misma web con las herramientas de cada marca. La de Android TV ya está en `android/`.
+- **Google Play**: subir los APK (o un AAB, con `./gradlew bundleRelease`) firmados con tu clave propia.
 
 ## Archivos
 
@@ -166,6 +225,9 @@ Esto es la plataforma (la parte que ve el público). Para venderla como servicio
 | `publicidad.js` | Campañas, piezas y estadísticas de publicidad. |
 | `rutas-cuenta.js` | Rutas del público: cuenta, planes, pagos y avisos. |
 | `public/cuenta.js` · `anuncios.js` | Pantallas de bienvenida y planes; avisos antes de la película y banners. |
+| `public/app-nativa.js` | Conexión con las apps de Android: elegir servidor, buscarlo en la wifi, pantalla encendida. |
+| `public/descargar.html` | Página para bajar las apps (lee los APK de `descargas/`). |
+| `android/` | App nativa para Android: `MainActivity.java` (la app), `BuscadorServidores.java` (busca en la wifi), `compilar.sh`. |
 | `public/activar.html` · `pago-prueba.html` | Activar la tele desde el celular; pago simulado del modo prueba. |
 | `public/admin.html` · `admin.js` · `admin.css` | La página del administrador. |
 | `public/catalogo.js` | Películas de ejemplo (el catálogo inicial) y filas del inicio. |

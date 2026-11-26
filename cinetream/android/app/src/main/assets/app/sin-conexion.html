@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cinetream · Sin conexión</title>
+<style>
+  :root { color-scheme: dark; --fondo: #0c0d12; --panel: #161821; --linea: #2a2d3a; --texto: #f4f1ea; --suave: #a7a9b4; --acento: #ffb547; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: radial-gradient(circle at 50% 0%, #2a1d08 0%, var(--fondo) 60%); color: var(--texto); font: 16px/1.5 system-ui, sans-serif; padding: 24px 16px; }
+  main { width: min(34rem, 100%); display: grid; gap: 1rem; text-align: center; }
+  .logo { font: 900 2rem/1 system-ui, sans-serif; letter-spacing: 0.04em; }
+  .logo b { color: var(--acento); }
+  h1 { margin: 0.4rem 0 0; font-size: 1.5rem; }
+  p { margin: 0; color: var(--suave); }
+  code { color: var(--texto); background: var(--panel); padding: 0.1rem 0.4rem; border-radius: 0.3rem; word-break: break-all; }
+  form { display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; margin-top: 0.5rem; }
+  input { min-width: 0; font: inherit; color: var(--texto); background: var(--panel); border: 2px solid var(--linea); border-radius: 0.6rem; padding: 0.7rem 0.9rem; }
+  button { font: 600 1rem/1 system-ui, sans-serif; color: var(--texto); background: #262936; border: 2px solid transparent; border-radius: 0.6rem; padding: 0.8rem 1.1rem; cursor: pointer; }
+  button.principal { background: var(--acento); color: #1a1205; }
+  button:focus, input:focus { outline: none; border-color: var(--texto); box-shadow: 0 0 0 3px #ffb54766; }
+  .acciones { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+  .nota { font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <div class="logo">CINE<b>TREAM</b></div>
+  <h1>No pudimos conectar con tu Cinetream</h1>
+  <p id="detalle"></p>
+  <div class="acciones">
+    <button class="principal" id="reintentar" autofocus>Reintentar</button>
+    <button id="buscar">Buscar en mi wifi</button>
+    <button id="demo">Ver la demostración</button>
+  </div>
+  <form id="form">
+    <input id="direccion" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="192.168.0.10:3500" aria-label="Dirección del servidor">
+    <button>Conectar</button>
+  </form>
+  <ul id="encontrados" aria-live="polite"></ul>
+  <p class="nota">La PC con Cinetream tiene que estar prendida, con el servidor andando y en la misma wifi que este equipo.</p>
+</main>
+<script>
+  const app = window.CinetreamApp;
+  const q = new URLSearchParams(location.search);
+  const servidor = q.get('servidor') || '';
+  const detalle = document.getElementById('detalle');
+  detalle.textContent = servidor ? 'Probamos con ' : 'Todavía no hay un servidor configurado.';
+  if (servidor) { const c = document.createElement('code'); c.textContent = servidor.replace(/^https?:\/\//, ''); detalle.append(c, '.'); }
+  document.getElementById('direccion').value = servidor.replace(/^https?:\/\//, '');
+  document.getElementById('reintentar').onclick = () => app.reintentar();
+  document.getElementById('demo').onclick = () => app.usarDemo();
+  document.getElementById('form').onsubmit = (e) => { e.preventDefault(); const v = document.getElementById('direccion').value.trim(); if (v) app.conectar(v); };
+  const lista = document.getElementById('encontrados');
+  document.getElementById('buscar').onclick = () => {
+    lista.innerHTML = '<li class="nota">Buscando en tu wifi… puede tardar unos segundos.</li>';
+    window.cinetreamServidores = (urls) => {
+      lista.innerHTML = '';
+      if (!urls.length) { lista.innerHTML = '<li class="nota">No encontramos ningún Cinetream en esta wifi.</li>'; return; }
+      for (const u of urls) {
+        const li = document.createElement('li'); const b = document.createElement('button');
+        b.className = 'principal'; b.textContent = 'Conectar con ' + u.replace(/^https?:\/\//, '');
+        b.onclick = () => app.conectar(u); li.append(b); lista.append(li);
+      }
+      lista.querySelector('button').focus();
+    };
+    app.buscarServidores();
+  };
+  // Control remoto: flechas arriba/abajo/izquierda/derecha recorren los botones
+  addEventListener('keydown', (e) => {
+    const paso = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+    if (!paso || (document.activeElement.tagName === 'INPUT' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight'))) return;
+    const todos = [...document.querySelectorAll('button, input')];
+    const i = todos.indexOf(document.activeElement);
+    todos[(i + paso + todos.length) % todos.length].focus();
+    e.preventDefault();
+  });
+</script>
+</body>
+</html>

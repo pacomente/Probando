@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="fondo">#0C0D12</color>
+    <color name="acento">#FFB547</color>
+    <color name="icono_fondo">#0C0D12</color>
+    <style name="Tema.Cinetream" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@drawable/arranque</item>
+        <item name="android:statusBarColor">@color/fondo</item>
+        <item name="android:navigationBarColor">@color/fondo</item>
+        <item name="android:colorAccent">@color/acento</item>
+    </style>
+</resources>

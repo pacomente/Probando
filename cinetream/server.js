@@ -21,6 +21,7 @@ const PORT = Number(process.env.PORT) || 3500;
 const HOST = process.env.HOST || '0.0.0.0';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const VIDEOS_DIR = CARPETA_VIDEOS;
+const DESCARGAS_DIR = path.join(__dirname, 'descargas'); // APK de la app para Android (celular y tele)
 const ADMIN_DESDE_RED = process.env.ADMIN_DESDE_RED === '1';
 const esLocal = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
 
@@ -37,6 +38,7 @@ const TIPOS = {
   '.webm': 'video/webm',
   '.m4v': 'video/mp4',
   '.vtt': 'text/vtt; charset=utf-8',
+  '.apk': 'application/vnd.android.package-archive',
 };
 const SEGURIDAD = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' };
 
@@ -117,6 +119,23 @@ const server = http.createServer(async (req, res) => {
         return res.end('Este título es solo para suscriptores Plus.');
       }
       return await servirVideo(req, res, archivo);
+    }
+    if (url.pathname === '/api/descargas') {
+      // Qué APK hay para bajar: descargas/cinetream-celular.apk y descargas/cinetream-tele.apk
+      const apps = {};
+      for (const tipo of ['celular', 'tele']) {
+        const info = await stat(path.join(DESCARGAS_DIR, `cinetream-${tipo}.apk`)).catch(() => null);
+        apps[tipo] = info ? { url: `/descargas/cinetream-${tipo}.apk`, tamano: info.size, fecha: info.mtimeMs } : null;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEGURIDAD });
+      return res.end(JSON.stringify(apps));
+    }
+    if (url.pathname.startsWith('/descargas/')) {
+      const archivo = dentroDe(DESCARGAS_DIR, url.pathname.slice('/descargas/'.length));
+      if (!archivo || !archivo.endsWith('.apk')) { res.writeHead(404, SEGURIDAD); return res.end(); }
+      const info = await stat(archivo);
+      res.writeHead(200, { 'Content-Type': TIPOS['.apk'], 'Content-Length': info.size, 'Content-Disposition': `attachment; filename="${path.basename(archivo)}"`, 'Cache-Control': 'no-cache', ...SEGURIDAD });
+      return createReadStream(archivo).pipe(res);
     }
     const archivo = dentroDe(PUBLIC_DIR, url.pathname === '/' ? 'index.html' : url.pathname.slice(1));
     if (!archivo) { res.writeHead(403, SEGURIDAD); return res.end(); }

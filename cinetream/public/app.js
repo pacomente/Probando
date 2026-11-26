@@ -6,6 +6,7 @@ import { accionDeTecla, enfocar, moverFoco, navegables } from './navegacion.js';
 import { abrirReproductor } from './reproductor.js';
 import { crearCuenta } from './cuenta.js';
 import { crearPublicidad } from './anuncios.js';
+import { enApp, esTeleApp, pintarConexion } from './app-nativa.js';
 
 const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -41,7 +42,7 @@ const bloqueada = (p) => Boolean(p.plus && !cuenta()?.plus);
 const conPublicidad = () => Boolean(cuenta()?.anuncios && !perfil?.ninos);
 let ultimoPrevio = 0;
 const sinTildes = (t) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const modoTV = () => !matchMedia('(pointer: coarse)').matches && innerWidth >= 1000;
+const modoTV = () => esTeleApp || (!matchMedia('(pointer: coarse)').matches && innerWidth >= 1000);
 
 // ---------- Datos guardados en este dispositivo ----------
 function leer(clave, porDefecto) {
@@ -546,7 +547,10 @@ function pintarAjustes() {
   interruptor('#ajuste-siguiente', ajustes.autoSiguiente);
   interruptor('#ajuste-animaciones', ajustes.animaciones);
   $('#ajuste-historial').textContent = 'Borrar el historial de este perfil';
-  $('#ajustes-admin').hidden = !conServidor;
+  $('#ajustes-admin').hidden = !conServidor || enApp;
+  $('#ajustes-app').hidden = !enApp;
+  if (enApp) pintarConexion($('#ajustes-app'), { enfocar });
+  $('#ajustes-descargar').hidden = enApp || !conServidor;
   const c = cuenta();
   $('#ajustes-cuenta').hidden = !c;
   if (c) {

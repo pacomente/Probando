@@ -726,3 +726,49 @@ body.pagina-simple { min-height: 100vh; display: grid; place-items: center; padd
 .anuncio-botones .btn:focus-visible { background: var(--texto); color: var(--fondo); }
 .anuncio-progreso { position: absolute; inset: auto 0 0; height: 0.3rem; background: #ffffff26; }
 .anuncio-progreso i { display: block; height: 100%; width: 0; background: var(--acento); transition: width 0.25s linear; }
+
+/* ---------- App de Android: conexión con el servidor ---------- */
+.conexion { display: grid; gap: 0.9rem; }
+.conexion h2 { margin: 0; }
+.conexion code { background: var(--superficie); padding: 0.1rem 0.4rem; border-radius: 0.3rem; }
+.conexion-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.6rem; max-width: 36rem; }
+.conexion-form input { min-width: 0; font: inherit; color: inherit; background: var(--superficie); border: 2px solid var(--linea); border-radius: 0.6rem; padding: 0.75rem 0.9rem; }
+.conexion-form input:focus, .conexion-form input.foco { outline: none; border-color: #f4f1ea; }
+.conexion-encontrados { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; justify-items: start; }
+.conexion-cuerpo { text-align: left; max-width: 40rem; }
+
+/* ---------- Descargar la app ---------- */
+.caja-descargas { max-width: 46rem; }
+.descargas { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; }
+.descarga { display: grid; gap: 0.4rem; align-content: start; padding: 1.2rem; border-radius: 1rem; background: var(--superficie); border: 1px solid var(--linea); }
+.descarga h2 { margin: 0; font-size: 1.2rem; }
+.descarga p { margin: 0; color: var(--suave); font-size: 0.92rem; }
+.descarga-icono { font-size: 2rem; }
+.descarga-accion { margin-top: 0.6rem; }
+.pasos-instalar { margin: 0; padding-left: 1.3rem; display: grid; gap: 0.6rem; color: var(--suave); text-align: left; }
+.pasos-instalar b { color: var(--texto); }
+.pasos-instalar code, .descarga code { color: var(--texto); background: var(--superficie-2); padding: 0.1rem 0.4rem; border-radius: 0.3rem; word-break: break-all; }
+
+/* Teles con Android (960×540 de pantalla útil) y celulares acostados: la bienvenida entra sin cortarse */
+.bienvenida { place-items: safe center; }
+@media (max-height: 640px) and (min-width: 700px) {
+  .bienvenida { padding-block: 1.2rem; }
+  .bienvenida-cuerpo { gap: 0.7rem; }
+  .bienvenida-logo { font-size: 1.5rem; }
+  .bienvenida h1 { font-size: 2.3rem; }
+  .bienvenida-bajada { font-size: 0.95rem; }
+  .bienvenida .planes { margin-top: 0.3rem; gap: 0.8rem; }
+  .bienvenida .plan { padding: 0.9rem 1.1rem; gap: 0.35rem; }
+  .bienvenida .plan-nombre { font-size: 1.25rem; }
+  .bienvenida .plan-precio b { font-size: 1.5rem; }
+  .bienvenida .plan-desc, .bienvenida .plan ul { font-size: 0.82rem; }
+  .bienvenida .plan ul { gap: 0.15rem; }
+  .bienvenida .plan-boton { margin-top: 0.3rem; padding: 0.55rem 0.8rem; }
+  .bienvenida .nota-prueba { display: none; }
+}
+@media (max-height: 640px) and (min-width: 700px) {
+  .anuncio-banner { height: 5.5rem; }
+  .anuncio-banner .anuncio-texto { padding: 0.6rem 1.5rem; gap: 0.1rem; }
+  .anuncio-banner .anuncio-texto b { font-size: 1.6rem; }
+  .anuncio-banner .anuncio-texto span { font-size: 0.8rem; }
+}

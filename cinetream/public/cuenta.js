@@ -1,6 +1,7 @@
 // Cuenta del espectador: bienvenida con los planes, crear cuenta o ingresar, ingreso en la tele con un código
 // y cambio de plan. Sin servidor (demostración), todo se simula en este dispositivo y no se cobra nada.
 import { enfocar } from './navegacion.js';
+import { enApp, pintarConexion } from './app-nativa.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -76,12 +77,18 @@ export function crearCuenta({ conServidor, alCambiar }) {
         <div class="acciones bienvenida-acciones">
           <button class="btn" data-nav data-ir-cuenta="ingresar">Ya tengo cuenta</button>
           ${conServidor && modoTV ? '<button class="btn" data-nav data-ir-cuenta="tv">Ingresar con el celular</button>' : ''}
+          ${enApp && !conServidor ? '<button class="btn" data-nav data-ir-cuenta="servidor">Conectar con mi servidor</button>' : ''}
         </div>
         <p class="nota-prueba">${esc(notaPrueba())}</p>
       </div>`;
     vista.querySelectorAll('[data-plan]').forEach((b) => b.addEventListener('click', () => pintarAcceso(vista, 'registro', b.dataset.plan)));
     $('[data-ir-cuenta="ingresar"]', vista).addEventListener('click', () => pintarAcceso(vista, 'ingresar'));
     $('[data-ir-cuenta="tv"]', vista)?.addEventListener('click', () => pintarTV(vista));
+    $('[data-ir-cuenta="servidor"]', vista)?.addEventListener('click', () => {
+      vista.innerHTML = '<div class="bienvenida-fondo" aria-hidden="true"></div><div class="bienvenida-cuerpo conexion-cuerpo"></div>';
+      pintarConexion($('.conexion-cuerpo', vista), { enfocar, alVolver: () => pintarBienvenida(vista, { modoTV }) });
+      enfocar($('.conexion-cuerpo [data-nav]', vista), { inicial: true });
+    });
     enfocar($('[data-plan]', vista), { inicial: true });
   }
 
