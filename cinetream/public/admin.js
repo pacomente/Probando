@@ -166,9 +166,15 @@ $('#link-form').addEventListener('submit', async (e) => {
   boton.textContent = 'Buscando…';
   try {
     analizado = await enviar('/analizar', 'POST', { url: $('#link-url').value });
-    const fuente = { archive: 'Internet Archive', directo: 'Archivo de video', pagina: 'Página web' }[analizado.tipo];
+    const fuente = { archive: 'Internet Archive', directo: 'Archivo de video', pagina: 'Página web', embed: `Reproductor de ${analizado.sitio}` }[analizado.tipo];
+    const conReproductor = analizado.tipo === 'embed';
     $('#link-portada').innerHTML = analizado.portada ? `<img src="${esc(analizado.portada)}" alt="Portada encontrada">` : '<span>Sin portada: se toma un cuadro del video o se usa una ilustración</span>';
-    $('#link-detalle').innerHTML = `<b>${esc(fuente)}</b>${analizado.tamano ? ` · ${tamano(analizado.tamano)}` : ''}${analizado.formato ? ` · ${esc(analizado.formato)}` : ''}<br>Revisá los datos antes de agregarla.`;
+    $('#link-detalle').innerHTML = conReproductor
+      ? `<b>${esc(fuente)}</b><br>La película se ve dentro de Cinetream con el reproductor de ${esc(analizado.sitio)}. No se descarga nada ni ocupa lugar.
+        ${analizado.paginaEntera ? '<br><b>Ojo:</b> no encontramos un reproductor suelto, así que se va a mostrar la página entera (con su menú y su publicidad).' : ''}
+        <br>Revisá los datos antes de agregarla.`
+      : `<b>${esc(fuente)}</b>${analizado.tamano ? ` · ${tamano(analizado.tamano)}` : ''}${analizado.formato ? ` · ${esc(analizado.formato)}` : ''}<br>Revisá los datos antes de agregarla.`;
+    $('#link-alta .modo').hidden = conReproductor;
     $('#link-campos').innerHTML = campos({ ...analizado, publicar: false });
     $('#link-derechos').checked = false;
     $('#link-alta').hidden = false;
@@ -188,7 +194,7 @@ $('#link-alta').addEventListener('submit', async (e) => {
   if (!datos.titulo) { $('#link-alta-error').textContent = 'Falta el título.'; return; }
   if (!$('#link-derechos').checked) { $('#link-alta-error').textContent = 'Confirmá que tenés derecho a publicar esta película.'; return; }
   try {
-    const modo = $('#link-alta [name="modo"]:checked').value;
+    const modo = analizado.tipo === 'embed' ? 'embed' : $('#link-alta [name="modo"]:checked').value;
     const { pelicula } = await enviar('/importar', 'POST', { info: analizado, datos, modo, derechos: true });
     avisar(modo === 'descargar' ? `Descargando «${pelicula.titulo}»…` : `«${pelicula.titulo}» se agregó`);
     $('#link-alta').hidden = true;
@@ -386,6 +392,10 @@ const esLink = (v) => /^https?:\/\//i.test(v || '');
 const sitio = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return 'otro sitio'; } };
 function origenDe(p) {
   const x = catalogo.extra[p.id] || {};
+  if (p.embed) {
+    if (x.enlace?.ok === false) return { clase: 'origen-caido', texto: `Reproductor caído · ${sitio(p.embed)}`, detalle: x.enlace.detalle };
+    return { clase: 'origen-embed', texto: `Reproductor de ${sitio(p.embed)} · no ocupa lugar` };
+  }
   if (!p.video) return { clase: 'origen-ninguno', texto: 'Sin video: se ve una señal de prueba' };
   if (p.video.startsWith('videos/')) return { clase: 'origen-servidor', texto: `Guardada en ${enInternet ? 'el servidor' : 'esta PC'} · ${tamano(x.bytes || 0)}` };
   if (enR2(p.video)) return { clase: 'origen-r2', texto: `En Cloudflare R2 · ${tamano(x.bytes || 0)}` };
@@ -417,7 +427,7 @@ function pintar() {
   const ps = catalogo.peliculas;
   const cuenta = (e) => ps.filter((p) => p.estado === e).length;
   const enServidor = ps.filter((p) => p.video?.startsWith('videos/'));
-  const conLink = ps.filter((p) => esLink(p.video));
+  const conLink = ps.filter((p) => esLink(p.video) || p.embed);
   const caidos = conLink.filter((p) => catalogo.extra[p.id]?.enlace?.ok === false).length;
   $('#resumen').innerHTML = [
     ['Publicadas', cuenta('publicada'), cuenta('oculta') ? `${cuenta('oculta')} ocultas` : ''],
@@ -427,14 +437,15 @@ function pintar() {
     ['Descargando', cuenta('descargando') + Object.values(catalogo.trabajos).filter((t) => t.tipo === 'guardar' && t.estado === 'descargando').length, ''],
   ].map(([t, v, d]) => dato(t, v, d)).join('');
   $('#almacenamiento').innerHTML = `<p class="nota"><b>Desde un link:</b> el video no se guarda en ${enInternet ? 'el servidor' : 'esta PC'}; se reproduce directo desde el sitio original
-    (por ejemplo archive.org). En Cinetream solo quedan la ficha y la portada. <b>Guardada:</b> el archivo entero está en el disco.</p>${barraDisco(catalogo.disco)}`;
+    (por ejemplo archive.org). <b>Reproductor de otro sitio:</b> la película se ve con el reproductor de YouTube, Vimeo u otra página, dentro de Cinetream.
+    En los dos casos solo quedan la ficha y la portada. <b>Guardada:</b> el archivo entero está en el disco${r2.configurado ? ' o en Cloudflare R2' : ''}.</p>${barraDisco(catalogo.disco)}`;
 
   const texto = $('#filtro-texto').value.trim().toLowerCase();
   const filtro = $('#filtro-estado').value;
   const FILTROS = {
     servidor: (p) => p.video?.startsWith('videos/'),
-    link: (p) => esLink(p.video),
-    caido: (p) => esLink(p.video) && catalogo.extra[p.id]?.enlace?.ok === false,
+    link: (p) => esLink(p.video) || Boolean(p.embed),
+    caido: (p) => (esLink(p.video) || p.embed) && catalogo.extra[p.id]?.enlace?.ok === false,
     r2: (p) => enR2(p.video),
   };
   const pasa = FILTROS[filtro] || ((p) => !filtro || p.estado === filtro);
@@ -559,7 +570,7 @@ function abrirEditor(p) {
   $('#editor-motivo').value = editando.motivo || 'anillos';
   $('#editor-error').textContent = '';
   $('#editor-cuadro').hidden = !editando.video?.startsWith('videos/');
-  $('#editor-video').textContent = editando.video ? `Video: ${editando.video.startsWith('videos/') ? (enInternet ? 'guardada en el servidor' : 'archivo en esta PC') : enR2(editando.video) ? 'en Cloudflare R2' : editando.video}` : 'Sin archivo: se reproduce una señal de prueba.';
+  $('#editor-video').textContent = editando.embed ? `Se ve con el reproductor de ${sitio(editando.embed)}: ${editando.embed}` : editando.video ? `Video: ${editando.video.startsWith('videos/') ? (enInternet ? 'guardada en el servidor' : 'archivo en esta PC') : enR2(editando.video) ? 'en Cloudflare R2' : editando.video}` : 'Sin archivo: se reproduce una señal de prueba.';
   pintarAficheEditor();
   $('#editor').showModal();
 }

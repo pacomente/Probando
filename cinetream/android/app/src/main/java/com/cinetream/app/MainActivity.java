@@ -202,6 +202,8 @@ public class MainActivity extends Activity {
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest pedido) {
             Uri u = pedido.getUrl();
             String esquema = String.valueOf(u.getScheme());
+            // Los reproductores de otros sitios (YouTube, Vimeo…) van en un marco dentro de la página: se dejan cargar
+            if (!pedido.isForMainFrame() && (esquema.equals("http") || esquema.equals("https"))) return false;
             if ((esquema.equals("http") || esquema.equals("https")) && esDeConfianza(u)) return false;
             // Links de anunciantes y otros sitios: se abren afuera
             try {

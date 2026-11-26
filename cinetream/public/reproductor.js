@@ -414,3 +414,69 @@ export function abrirReproductor(contenedor, pelicula, { desde = 0, alGuardar, a
   enfocar($('.rep-play'), { inicial: true });
   return { salir };
 }
+
+// ---------- Películas con el reproductor de otro sitio (YouTube, Vimeo, Google Drive…) ----------
+// No hay archivo de video propio: se muestra el reproductor oficial de ese sitio dentro de Cinetream.
+export function abrirReproductorExterno(contenedor, pelicula, { alSalir }) {
+  const sitio = (() => { try { return new URL(pelicula.embed).hostname.replace(/^www\./, ''); } catch { return 'otro sitio'; } })();
+  contenedor.innerHTML = `
+    <div class="rep rep-externo">
+      <iframe class="rep-iframe" tabindex="0" allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+        allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+      <div class="rep-cargando-externo" aria-hidden="true"><span></span></div>
+      <div class="rep-externo-zona" aria-hidden="true"></div>
+      <div class="rep-externo-barra">
+        <button class="rep-volver" data-nav aria-label="Volver">← Volver</button>
+        <div class="rep-titulo"><b></b><span></span></div>
+      </div>
+    </div>`;
+  const $ = (s) => contenedor.querySelector(s);
+  const marco = $('.rep-iframe');
+  $('.rep-titulo b').textContent = pelicula.titulo;
+  $('.rep-titulo span').textContent = `Reproductor de ${sitio}`;
+  marco.title = pelicula.titulo;
+  marco.addEventListener('load', () => contenedor.querySelector('.rep-cargando-externo')?.remove(), { once: true });
+  marco.src = pelicula.embed;
+
+  // La barra de arriba se esconde sola; vuelve al mover el mouse o tocar arriba
+  const caja = $('.rep-externo');
+  let temporizador;
+  const mostrarBarra = () => {
+    caja.classList.add('con-barra');
+    clearTimeout(temporizador);
+    temporizador = setTimeout(() => caja.classList.remove('con-barra'), 4000);
+  };
+  // El reproductor del otro sitio se queda con el mouse: la franja de arriba es la que muestra la barra
+  $('.rep-externo-zona').addEventListener('pointermove', mostrarBarra);
+  $('.rep-externo-zona').addEventListener('pointerdown', mostrarBarra);
+  caja.addEventListener('pointermove', mostrarBarra);
+  mostrarBarra();
+
+  let cerrado = false;
+  function tecla(e) {
+    if (cerrado) return;
+    const accion = accionDeTecla(e);
+    if (!accion) return;
+    e.stopPropagation(); // la navegación general no se entera mientras se ve la película
+    if (accion === 'volver' || accion === 'detener') { e.preventDefault(); salir(); return; }
+    mostrarBarra();
+    // Abajo: el control pasa al reproductor del sitio (pausa, adelantar…); arriba: vuelve al botón Volver
+    if (accion === 'abajo') { e.preventDefault(); marco.focus(); }
+    if (accion === 'arriba') { e.preventDefault(); enfocar($('.rep-volver'), { inicial: true }); }
+  }
+  document.addEventListener('keydown', tecla, true);
+  $('.rep-volver').addEventListener('click', salir);
+
+  function salir() {
+    if (cerrado) return;
+    cerrado = true;
+    clearTimeout(temporizador);
+    document.removeEventListener('keydown', tecla, true);
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    contenedor.innerHTML = '';
+    alSalir();
+  }
+
+  enfocar($('.rep-volver'), { inicial: true });
+  return { salir };
+}

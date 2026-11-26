@@ -2,6 +2,8 @@
 //  - Internet Archive (archive.org/details/…): video, título, año, director, sinopsis, licencia y portada.
 //  - Link directo a un archivo de video (.mp4, .webm, .m4v…).
 //  - Página web que publica su video con etiquetas Open Graph (og:video, og:title, og:image…).
+//  - Página con su propio reproductor (YouTube, Vimeo, Dailymotion, Google Drive u otra): no se descarga nada,
+//    la película se ve con el reproductor oficial de ese sitio dentro de Cinetream (lo que esos sitios permiten).
 // No descarga de YouTube ni de plataformas de streaming: sus condiciones de uso no lo permiten.
 import { createWriteStream } from 'node:fs';
 import { rename, rm } from 'node:fs/promises';
@@ -10,7 +12,10 @@ import { once } from 'node:events';
 // Se puede cambiar para pruebas; en uso normal es Internet Archive
 const ARCHIVE = (process.env.ARCHIVE_URL || 'https://archive.org').replace(/\/$/, '');
 const HOST_ARCHIVE = new URL(ARCHIVE).host;
-const PLATAFORMAS_PROHIBIDAS = /(^|\.)(youtube\.com|youtu\.be|netflix\.com|disneyplus\.com|primevideo\.com|amazon\.com|max\.com|hbomax\.com|paramountplus\.com|starplus\.com|vimeo\.com|tiktok\.com|instagram\.com|facebook\.com|twitch\.tv)$/i;
+// Plataformas pagas con DRM: no se pueden mostrar en otras páginas
+const PLATAFORMAS_PROHIBIDAS = /(^|\.)(netflix\.com|disneyplus\.com|primevideo\.com|amazon\.com|max\.com|hbomax\.com|paramountplus\.com|starplus\.com|appletv\.apple\.com|crunchyroll\.com|flow\.com\.ar|tiktok\.com|instagram\.com|facebook\.com)$/i;
+// Sitios que permiten ver sus videos en otras páginas con su reproductor oficial, pero no descargarlos
+const SOLO_REPRODUCTOR = /(^|\.)(youtube\.com|youtube-nocookie\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly|drive\.google\.com|twitch\.tv)$/i;
 const VIDEO_EXT = /\.(mp4|m4v|webm|mov|ogv)(\?|#|$)/i;
 
 export class ErrorImportar extends Error {}
@@ -20,9 +25,98 @@ function validarLink(url) {
   try { u = new URL(url); } catch { throw new ErrorImportar('Ese link no es válido. Copialo completo, empezando por https://'); }
   if (!['http:', 'https:'].includes(u.protocol)) throw new ErrorImportar('El link tiene que empezar con http:// o https://');
   if (PLATAFORMAS_PROHIBIDAS.test(u.hostname)) {
-    throw new ErrorImportar(`Cinetream no descarga de ${u.hostname}: sus condiciones de uso no lo permiten. Usá un link directo al archivo, una página de Internet Archive o subí el archivo desde la PC.`);
+    throw new ErrorImportar(`${u.hostname} no permite mostrar sus películas en otras páginas (están protegidas). Usá Internet Archive, un link directo al archivo, una página con reproductor (YouTube, Vimeo…) o subí el archivo.`);
   }
   return u;
+}
+
+// ---------- Reproductores oficiales (no se descarga nada) ----------
+const sitioDe = (url) => new URL(url).hostname.replace(/^www\./, '');
+function reproductorConocido(u) {
+  const h = u.hostname.replace(/^(www|m)\./, '');
+  let id;
+  if (h === 'youtu.be') id = u.pathname.slice(1).split('/')[0];
+  else if (/youtube(-nocookie)?\.com$/.test(h)) id = u.searchParams.get('v') || u.pathname.match(/^\/(?:embed|shorts|live|v)\/([\w-]{6,})/)?.[1];
+  if (id && /^[\w-]{6,20}$/.test(id)) {
+    const desde = Number.parseInt(u.searchParams.get('t') || u.searchParams.get('start') || '0', 10) || 0;
+    return {
+      proveedor: 'youtube', id,
+      embed: `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&playsinline=1&modestbranding=1${desde ? `&start=${desde}` : ''}`,
+      oembed: `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}`,
+      portadas: [`https://i.ytimg.com/vi/${id}/maxresdefault.jpg`, `https://i.ytimg.com/vi/${id}/hqdefault.jpg`],
+    };
+  }
+  const vimeo = h.endsWith('vimeo.com') && u.pathname.match(/(?:^|\/)(?:video\/)?(\d{5,})(?:\/([0-9a-f]{6,}))?/);
+  if (vimeo) {
+    return {
+      proveedor: 'vimeo', id: vimeo[1],
+      embed: `https://player.vimeo.com/video/${vimeo[1]}?autoplay=1${vimeo[2] ? `&h=${vimeo[2]}` : ''}`,
+      oembed: `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(u.href)}`,
+    };
+  }
+  const dm = (h === 'dai.ly' && u.pathname.slice(1)) || (h.endsWith('dailymotion.com') && u.pathname.match(/\/(?:embed\/)?video\/([a-z0-9]+)/i)?.[1]);
+  if (dm) {
+    return {
+      proveedor: 'dailymotion', id: dm,
+      embed: `https://www.dailymotion.com/embed/video/${dm}?autoplay=1`,
+      oembed: `https://www.dailymotion.com/services/oembed?format=json&url=${encodeURIComponent(`https://www.dailymotion.com/video/${dm}`)}`,
+    };
+  }
+  const drive = h === 'drive.google.com' && (u.pathname.match(/\/file\/d\/([\w-]{10,})/)?.[1] || u.searchParams.get('id'));
+  if (drive) return { proveedor: 'drive', id: drive, embed: `https://drive.google.com/file/d/${drive}/preview` };
+  return null;
+}
+
+async function analizarReproductor(r, original) {
+  const datos = { tipo: 'embed', embed: r.embed, fuente: original, sitio: { youtube: 'YouTube', vimeo: 'Vimeo', dailymotion: 'Dailymotion', drive: 'Google Drive' }[r.proveedor] || sitioDe(r.embed) };
+  if (r.oembed) {
+    const o = await pedir(r.oembed).catch(() => null);
+    if (o && (o.status === 401 || o.status === 403)) throw new ErrorImportar(`El dueño de ese video no permite verlo en otras páginas (${datos.sitio} lo bloquea). Probá con otro link.`);
+    if (o && o.status === 404) throw new ErrorImportar(`Ese video no existe o es privado en ${datos.sitio}.`);
+    const j = o?.ok ? await o.json().catch(() => null) : null;
+    if (j) {
+      datos.titulo = sinEtiquetas(j.title);
+      datos.direccion = sinEtiquetas(j.author_name || '');
+      if (j.duration) datos.duracionMin = Math.round(Number(j.duration) / 60);
+      if (j.description) datos.sinopsis = sinEtiquetas(j.description).slice(0, 1200);
+      datos.portada = j.thumbnail_url || null;
+    }
+  }
+  // YouTube: la portada en alta calidad si existe
+  for (const p of r.portadas || []) {
+    const ok = await pedir(p, { method: 'HEAD' }, 8000).then((x) => x.ok).catch(() => false);
+    if (ok) { datos.portada = p; break; }
+  }
+  datos.titulo ||= 'Película';
+  return datos;
+}
+
+// ¿Se puede mostrar esta página dentro de Cinetream? (algunas lo prohíben)
+function permiteMostrarse(r) {
+  const xfo = (r.headers.get('x-frame-options') || '').toLowerCase();
+  if (xfo.includes('deny') || xfo.includes('sameorigin')) return false;
+  const fa = (r.headers.get('content-security-policy') || '').match(/frame-ancestors([^;]*)/i)?.[1]?.trim().toLowerCase();
+  if (fa && !fa.split(/\s+/).includes('*')) return false;
+  return true;
+}
+
+/** ¿Sigue andando el reproductor de esta película? (para «Revisar links») */
+export async function revisarReproductor(embed) {
+  try {
+    const u = new URL(embed);
+    const r = reproductorConocido(u);
+    if (r?.oembed) {
+      const o = await pedir(r.oembed, {}, 15000);
+      if (o.status === 401 || o.status === 403) return { ok: false, detalle: 'El dueño ya no permite verlo en otras páginas' };
+      if (o.status === 404) return { ok: false, detalle: 'El video fue borrado o es privado' };
+      return o.ok ? { ok: true, detalle: 'Funciona' } : { ok: false, detalle: `El sitio respondió ${o.status}` };
+    }
+    const p = await pedir(embed, {}, 15000);
+    p.body?.cancel().catch(() => {});
+    return p.ok ? { ok: true, detalle: 'Funciona' } : { ok: false, detalle: `El sitio respondió ${p.status}` };
+  } catch (e) {
+    return { ok: false, detalle: e.message || 'No se pudo conectar con el sitio' };
+  }
 }
 
 async function pedir(url, opciones = {}, ms = 20000) {
@@ -57,6 +151,9 @@ const traducirGenero = (s) => GENEROS[String(s).trim().toLowerCase()] || null;
 // ---------- Análisis del link ----------
 export async function analizar(url) {
   const u = validarLink(url);
+  const conocido = reproductorConocido(u);
+  if (conocido) return analizarReproductor(conocido, u.href);
+  if (SOLO_REPRODUCTOR.test(u.hostname)) throw new ErrorImportar(`No reconocimos ese link de ${sitioDe(u.href)}. Copiá el link del video (el que aparece al tocar «Compartir»).`);
   const ia = (u.host === HOST_ARCHIVE || u.hostname.endsWith('archive.org')) && u.pathname.match(/^\/(?:details|download|embed)\/([^/?#]+)/);
   if (ia) return analizarArchive(decodeURIComponent(ia[1]));
 
@@ -69,7 +166,7 @@ export async function analizar(url) {
     const tamano = Number((r.headers.get('content-range') || '').split('/')[1]) || Number(r.headers.get('content-length')) || null;
     return { tipo: 'directo', video: u.href, titulo: titulo(u.pathname.split('/').pop() || 'Película'), tamano, formato: tipo || 'video' };
   }
-  if (tipo.includes('html')) return analizarPagina(u, await leerTexto(r, 2_000_000));
+  if (tipo.includes('html')) return analizarPagina(u, await leerTexto(r, 2_000_000), permiteMostrarse(r));
   await r.body?.cancel();
   throw new ErrorImportar('El link no lleva a un video ni a una página con video. Probá con el link directo al archivo (.mp4) o con una página de Internet Archive.');
 }
@@ -125,7 +222,7 @@ async function analizarArchive(id) {
 }
 
 // Página web con etiquetas Open Graph
-function analizarPagina(u, html) {
+function analizarPagina(u, html, mostrable) {
   const meta = (prop) => {
     const re = new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]*>`, 'i');
     const etiqueta = html.match(re)?.[0];
@@ -135,7 +232,31 @@ function analizarPagina(u, html) {
   const video = absoluto(meta('og:video:secure_url') || meta('og:video:url') || meta('og:video'))
     || absoluto(html.match(/<video[^>]+src=["']([^"']+)["']/i)?.[1] || html.match(/<source[^>]+src=["']([^"']+\.(?:mp4|webm|m4v))["']/i)?.[1]);
   if (!video || !VIDEO_EXT.test(new URL(video).pathname)) {
-    throw new ErrorImportar('En esa página no encontramos un video descargable. Si el video está en un reproductor externo (YouTube, Vimeo…), no se puede importar.');
+    // Sin archivo de video: se usa el reproductor de la página (el que ella misma muestra)
+    const datosPagina = {
+      fuente: u.href,
+      portada: absoluto(meta('og:image')),
+      titulo: sinEtiquetas(meta('og:title') || html.match(/<title>([^<]*)<\/title>/i)?.[1] || u.hostname),
+      sinopsis: sinEtiquetas(meta('og:description') || meta('description') || '').slice(0, 1200),
+    };
+    // Marcos de la página que parecen un reproductor: los que permiten pantalla completa o tienen nombre de reproductor
+    const PUBLICIDAD = /(^|[./-])ads?[./-]|doubleclick|googlesyndication|adservice|facebook\.com\/plugins|twitter\.com|disqus|recaptcha/i;
+    const PALABRAS = /embed|player|play|video|reproductor|reprodutor|lecteur|watch|stream|pelicula|movie/i;
+    const marcos = [...html.matchAll(/<iframe\b[^>]*>/gi)].map(([etiqueta]) => {
+      const src = absoluto(etiqueta.match(/\ssrc=["']([^"']+)["']/i)?.[1]);
+      const puntos = (/allowfullscreen|allow=["'][^"']*fullscreen/i.test(etiqueta) ? 3 : 0) + (src && PALABRAS.test(src) ? 2 : 0);
+      return { src, puntos };
+    });
+    const candidatos = [{ src: absoluto(meta('twitter:player')), puntos: 4 }, { src: video, puntos: 4 }, ...marcos]
+      .filter((c) => c.src && /^https?:/i.test(c.src) && !PUBLICIDAD.test(c.src));
+    for (const c of candidatos) {
+      const conocido = reproductorConocido(new URL(c.src));
+      if (conocido) return { ...datosPagina, tipo: 'embed', embed: conocido.embed, sitio: sitioDe(conocido.embed) };
+    }
+    const reproductor = candidatos.filter((c) => c.puntos > 0).sort((x, y) => y.puntos - x.puntos)[0]?.src;
+    if (reproductor) return { ...datosPagina, tipo: 'embed', embed: reproductor, sitio: sitioDe(reproductor) };
+    if (!mostrable) throw new ErrorImportar('Esa página no tiene un video que Cinetream pueda mostrar y no permite mostrarse dentro de otra. Buscá el link directo del video o del reproductor.');
+    return { ...datosPagina, tipo: 'embed', embed: u.href, sitio: sitioDe(u.href), paginaEntera: true };
   }
   validarLink(video);
   return {

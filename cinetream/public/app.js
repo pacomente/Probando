@@ -3,7 +3,7 @@
 import { estudio, FILAS, IMPRESCINDIBLES, PELICULAS as PELICULAS_EJEMPLO } from './catalogo.js';
 import { afiche, avatar, fondoApaisado, miniatura } from './carteles.js';
 import { accionDeTecla, enfocar, moverFoco, navegables } from './navegacion.js';
-import { abrirReproductor } from './reproductor.js';
+import { abrirReproductor, abrirReproductorExterno } from './reproductor.js';
 import { crearCuenta } from './cuenta.js';
 import { crearPublicidad } from './anuncios.js';
 import { enApp, esTeleApp, pintarConexion } from './app-nativa.js';
@@ -140,7 +140,7 @@ function tarjeta(p) {
   const prog = progresoDe(p.id);
   return `<button class="tarjeta" data-nav data-id="${esc(p.id)}" aria-label="${esc(`${p.titulo}, ${p.anio}, ${duracion(p.duracionMin)}`)}">
     ${afiche(p, estudio(p))}
-    ${p.plus ? '<span class="sello sello-plus">Plus</span>' : p.video || p.bloqueada ? '' : '<span class="sello">Próximamente</span>'}
+    ${p.plus ? '<span class="sello sello-plus">Plus</span>' : p.video || p.embed || p.bloqueada ? '' : '<span class="sello">Próximamente</span>'}
     ${prog && enCurso(p.id) ? `<span class="progreso"><i style="width:${prog.pct}%"></i></span>` : ''}
   </button>`;
 }
@@ -448,7 +448,7 @@ function pintarFicha(id) {
       <dl>
         ${[['Dirección', p.direccion], ['Origen', p.origen], ['Géneros', p.generos.join(', ')], ['Licencia', p.licencia]]
     .filter(([, v]) => v).map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}
-        ${p.video || bloqueada(p) ? '' : '<dt>Archivo</dt><dd>Próximamente. Mientras tanto se reproduce una señal de prueba.</dd>'}
+        ${p.video || p.embed || bloqueada(p) ? '' : '<dt>Archivo</dt><dd>Próximamente. Mientras tanto se reproduce una señal de prueba.</dd>'}
       </dl>
     </div>
     ${filaDe('Más como esta', parecidas, 'parecidas')}`;
@@ -611,7 +611,7 @@ $('#ajuste-historial').addEventListener('click', (e) => {
 // La siguiente: una película parecida que todavía no se vio entera, mejor si ya tiene su archivo
 function siguienteDe(p) {
   const candidatas = catalogo().filter((q) => q.id !== p.id && !(progresoDe(q.id)?.pct >= 95));
-  const puntaje = (q) => q.generos.filter((g) => p.generos.includes(g)).length * 2 + (q.video ? 1 : 0);
+  const puntaje = (q) => q.generos.filter((g) => p.generos.includes(g)).length * 2 + (q.video || q.embed ? 1 : 0);
   return candidatas.sort((a, b) => puntaje(b) - puntaje(a))[0] || null;
 }
 
@@ -646,7 +646,8 @@ async function reproducir(id, desde) {
   let siguientePedida = null;
   // Cuenta la reproducción para las estadísticas del administrador
   if (conServidor) fetch('/api/vista', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id }), keepalive: true }).catch(() => {});
-  const rep = abrirReproductor(contenedor, p, {
+  const abrir = p.embed ? abrirReproductorExterno : abrirReproductor;
+  const rep = abrir(contenedor, p, {
     desde: inicio,
     siguiente: siguienteDe(p),
     autoSiguiente: ajustes.autoSiguiente,
