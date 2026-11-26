@@ -14,7 +14,8 @@ import { rutasCuenta } from './rutas-cuenta.js';
 import { cuentaDe, planEfectivo } from './cuentas.js';
 import { CARPETA_PIEZAS } from './publicidad.js';
 import { modoPrueba } from './pagos.js';
-import { esLocal } from './red.js';
+import { esLocal, ipCliente } from './red.js';
+import { registrarVista } from './estadisticas.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3500;
@@ -83,9 +84,18 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/catalogo') {
       const plus = planEfectivo(cuentaDe(req)).plus;
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEGURIDAD });
-      return res.end(JSON.stringify({ peliculas: publicadas().map(({ fuente, estado, ...p }) => (p.plus && !plus ? { ...p, video: null, bloqueada: true } : p)) }));
+      return res.end(JSON.stringify({ peliculas: publicadas().map(({ fuente, estado, videoOriginal, ...p }) => (p.plus && !plus ? { ...p, video: null, bloqueada: true } : p)) }));
     }
     // Cuenta, planes, pagos y publicidad
+    // Una reproducción (la manda la plataforma cuando arranca una película)
+    if (url.pathname === '/api/vista' && req.method === 'POST') {
+      let cuerpo = '';
+      for await (const parte of req) { cuerpo += parte; if (cuerpo.length > 500) break; }
+      const id = String((() => { try { return JSON.parse(cuerpo).id; } catch { return ''; } })() || '');
+      if (publicadas().some((p) => p.id === id)) registrarVista(id, cuentaDe(req)?.id || ipCliente(req));
+      res.writeHead(204, SEGURIDAD);
+      return res.end();
+    }
     if (/^\/api\/(cuenta|planes|anuncios|pagos)(\/|$)/.test(url.pathname)) return await rutasCuenta(req, res, url);
     if (url.pathname.startsWith('/anuncios/')) {
       const archivo = dentroDe(CARPETA_PIEZAS, url.pathname.slice('/anuncios/'.length));

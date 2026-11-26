@@ -59,6 +59,27 @@ derechos de cada película que se agrega.
 Los datos quedan en la carpeta `datos/` (catálogo, portadas y contraseña) y los videos en `videos/`: conviene hacer
 copias de seguridad de las dos.
 
+### ¿Dónde queda guardada cada película?
+
+| Cómo se agregó | Qué se guarda en el servidor | Qué pasa si el sitio original la borra |
+|---|---|---|
+| **Desde un link** («Reproducir desde el link») | Solo la ficha y la portada (unos KB). El video se reproduce directo desde el sitio original, sin pasar por el servidor. | Deja de verse. «Revisar links» lo detecta. |
+| **Guardada** («Guardarla en Cinetream» o subida) | El archivo entero, en el disco del servidor. | Se sigue viendo. |
+
+En el catálogo del administrador cada película muestra dónde está su video y cuánto ocupa, y se puede pasar de una forma a
+la otra: **Guardar en el servidor** baja el video al disco (mientras tanto se sigue viendo desde el link) y **Liberar espacio**
+borra el archivo y vuelve a reproducirla desde el link original, después de comprobar que ese link sigue andando.
+
+### Más herramientas del administrador
+
+- **Resumen:** reproducciones de los últimos 30 días (gráfico por día), lo más visto, suscriptores por plan y el disco
+  (videos, portadas, publicidad y lugar libre). Avisa cuando el disco está casi lleno.
+- **Catálogo:** filtros por estado, por dónde está el video (servidor, link, link caído) y orden por vistas, título o peso.
+  **Revisar links** prueba todos los videos «desde un link» y marca los que ya no funcionan.
+- **Suscriptores:** **Exportar planilla** baja todas las cuentas en un CSV que abre Excel o Google Sheets.
+- **Seguridad:** cambiar la contraseña del administrador (con medidor de fuerza; cierra las sesiones de otros equipos),
+  cerrar las otras sesiones y ver los datos del servidor.
+
 ## El catálogo: solo contenido legal
 
 El catálogo de ejemplo (`public/catalogo.js`) tiene **películas abiertas de la Blender Foundation** (Creative Commons:
@@ -245,6 +266,7 @@ Esto es la plataforma (la parte que ve el público). Para venderla como servicio
 | `admin.js` | Rutas del administrador: contraseña, importar, subir, editar y eliminar. |
 | `importar.js` | Análisis de links (Internet Archive, archivo directo, página con video) y descargas. |
 | `datos.js` | Catálogo y contraseña guardados en `datos/`. |
+| `estadisticas.js` | Reproducciones por película y estado de los links. |
 | `red.js` | IP del visitante y pedidos locales, también detrás del proxy de Render. |
 | `../render.yaml` | Configuración para publicar en Render. |
 | `cuentas.js` | Cuentas, planes, sesiones y código para la tele. |

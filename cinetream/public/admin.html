@@ -45,6 +45,7 @@
       <button role="tab" data-seccion="suscriptores">Suscriptores</button>
       <button role="tab" data-seccion="publicidad">Publicidad</button>
       <button role="tab" data-seccion="planes">Planes y pagos</button>
+      <button role="tab" data-seccion="ajustes">Seguridad</button>
     </nav>
 
     <!-- Resumen del negocio -->
@@ -54,10 +55,20 @@
         <code>MP_ACCESS_TOKEN</code> (y opcionalmente <code>MP_WEBHOOK_SECRET</code>) antes de arrancar Cinetream. Ver «Planes y pagos».
       </div>
       <section class="resumen" id="negocio-datos" aria-label="Indicadores"></section>
-      <section class="tarjeta-panel">
-        <h2>Suscriptores por plan</h2>
-        <div class="barras" id="negocio-planes"></div>
-      </section>
+      <div class="paneles-dobles">
+        <section class="tarjeta-panel">
+          <div class="panel-titulo"><h2>Reproducciones</h2><span class="nota">Últimos 30 días</span></div>
+          <div class="grafico-vistas" id="negocio-grafico" role="img"></div>
+          <h3>Lo más visto</h3>
+          <ol class="mas-vistas" id="negocio-mas-vistas"></ol>
+        </section>
+        <section class="tarjeta-panel">
+          <h2>Suscriptores por plan</h2>
+          <div class="barras" id="negocio-planes"></div>
+          <h3>Disco del servidor</h3>
+          <div id="negocio-disco"></div>
+        </section>
+      </div>
     </div>
 
     <!-- Catálogo -->
@@ -118,14 +129,25 @@
       <div class="catalogo-cabecera">
         <h2>Catálogo</h2>
         <input id="filtro-texto" type="search" placeholder="Buscar en el catálogo" aria-label="Buscar en el catálogo">
-        <select id="filtro-estado" aria-label="Filtrar por estado">
+        <select id="filtro-estado" aria-label="Filtrar">
           <option value="">Todas</option>
           <option value="publicada">Publicadas</option>
           <option value="oculta">Ocultas</option>
           <option value="descargando">Descargando</option>
           <option value="error">Con error</option>
+          <option value="servidor">Guardadas en el servidor</option>
+          <option value="link">Desde un link</option>
+          <option value="caido">Con el link caído</option>
         </select>
+        <select id="filtro-orden" aria-label="Ordenar">
+          <option value="">Más nuevas primero</option>
+          <option value="vistas">Más vistas</option>
+          <option value="titulo">Por título</option>
+          <option value="tamano">Más pesadas</option>
+        </select>
+        <button class="btn" id="revisar-links">Revisar links</button>
       </div>
+      <div class="almacenamiento" id="almacenamiento"></div>
       <ul class="catalogo-lista" id="catalogo"></ul>
     </section>
     </div>
@@ -137,6 +159,7 @@
           <h2>Suscriptores</h2>
           <input id="cuentas-filtro" type="search" placeholder="Buscar por correo o nombre" aria-label="Buscar suscriptores">
           <select id="cuentas-plan" aria-label="Filtrar por plan"><option value="">Todos los planes</option></select>
+          <a class="btn" href="/api/admin/cuentas.csv" download>Exportar planilla</a>
         </div>
         <p class="nota">Desde acá podés dar o quitar un plan a mano (por ejemplo, si alguien pagó por transferencia o para una cortesía).</p>
         <div class="tabla-envoltura"><table class="tabla-admin" id="cuentas-tabla"></table></div>
@@ -174,6 +197,31 @@
           <li>En la aplicación de Mercado Pago, configurá las notificaciones (webhooks) del tema <b>Suscripciones</b> hacia <code id="pagos-webhook">https://tu-dominio/api/pagos/mercadopago</code> y copiá la clave secreta en <code>MP_WEBHOOK_SECRET</code>.</li>
           <li data-lugar="paso-https">Para cobrar, Cinetream tiene que estar publicado en internet con HTTPS (un servidor o un servicio de hosting), no solo en la red de tu casa.</li>
         </ol>
+      </section>
+    </div>
+
+    <!-- Seguridad -->
+    <div class="seccion" id="seccion-ajustes" hidden>
+      <section class="tarjeta-panel">
+        <h2>Contraseña del administrador</h2>
+        <p class="nota">Cambiala cada tanto y no la compartas. Al cambiarla se cierran las sesiones abiertas en otros equipos.</p>
+        <form class="form-clave" id="clave-form">
+          <label>Contraseña actual<input type="password" name="actual" autocomplete="current-password" required></label>
+          <label>Contraseña nueva (al menos 10 caracteres)<input type="password" name="nueva" autocomplete="new-password" required minlength="10"></label>
+          <label>Repetí la nueva<input type="password" name="repetir" autocomplete="new-password" required minlength="10"></label>
+          <div class="medidor" id="clave-medidor" aria-live="polite"><i></i><span></span></div>
+          <div class="acciones"><button class="btn principal">Cambiar la contraseña</button></div>
+          <p class="error" id="clave-error" role="alert"></p>
+        </form>
+      </section>
+      <section class="tarjeta-panel">
+        <h2>Sesiones</h2>
+        <p class="nota">Si entraste al administrador desde una compu ajena o perdiste el celular, cerrá las otras sesiones: solo queda abierta esta.</p>
+        <div class="acciones"><button class="btn" id="cerrar-sesiones">Cerrar las otras sesiones</button></div>
+      </section>
+      <section class="tarjeta-panel">
+        <h2>Este servidor</h2>
+        <dl class="ficha-servidor" id="ficha-servidor"></dl>
       </section>
     </div>
   </div>

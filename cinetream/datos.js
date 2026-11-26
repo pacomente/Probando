@@ -84,6 +84,7 @@ function limpiar(d) {
     plus: Boolean(d.plus), // solo para suscriptores Plus
     estado: ['publicada', 'oculta', 'descargando', 'error'].includes(d.estado) ? d.estado : 'publicada',
     fuente: d.fuente ? texto(d.fuente, 2000) : null,
+    videoOriginal: d.videoOriginal ? texto(d.videoOriginal, 2000) : null, // link del que se bajó el video guardado
     alta: Number(d.alta) || Date.now(),
   };
 }

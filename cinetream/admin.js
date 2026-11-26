@@ -1,7 +1,7 @@
 // Administrador de Cinetream: sesión con contraseña, importar por link, subir archivos y editar el catálogo.
 import crypto from 'node:crypto';
 import { createWriteStream } from 'node:fs';
-import { readdir, rename, rm, stat } from 'node:fs/promises';
+import { readdir, rename, rm, stat, statfs } from 'node:fs/promises';
 import { once } from 'node:events';
 import path from 'node:path';
 import {
@@ -13,6 +13,7 @@ import { activarPlan, buscarCuenta, guardarCuentas, guardarPlanes, listaPlanes, 
 import { actualizarCampana, buscarCampana, campanas, CARPETA_PIEZAS, crearCampana, ponerPieza, quitarCampana } from './publicidad.js';
 import { modoPrueba } from './pagos.js';
 import { direccionPublica, enInternet, esLocal, ipCliente } from './red.js';
+import { estadoEnlace, guardarEnlace, olvidarPelicula, revisarEnlace, vistas, vistasPorDia } from './estadisticas.js';
 
 const HORAS_SESION = 12;
 const sesiones = new Map(); // id → vence
@@ -61,10 +62,41 @@ const EXT_VIDEO = { 'video/mp4': '.mp4', 'video/webm': '.webm', 'video/quicktime
 const EXT_IMAGEN = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
 const extDe = (url, tipo) => EXT_VIDEO[tipo] || (path.extname(new URL(url).pathname).toLowerCase().match(/^\.(mp4|m4v|webm|mov|ogv)$/)?.[0]) || '.mp4';
 
-async function espacioVideos() {
+async function espacioCarpeta(carpeta) {
   let total = 0;
-  for (const f of await readdir(CARPETA_VIDEOS).catch(() => [])) total += (await stat(path.join(CARPETA_VIDEOS, f)).catch(() => ({ size: 0 }))).size;
+  for (const f of await readdir(carpeta).catch(() => [])) total += (await stat(path.join(carpeta, f)).catch(() => ({ size: 0 }))).size;
   return total;
+}
+const espacioVideos = () => espacioCarpeta(CARPETA_VIDEOS);
+
+// Cuánto ocupa Cinetream y cuánto lugar queda en el disco (en Render, el disco persistente)
+async function disco() {
+  const [videos, portadas, anuncios] = await Promise.all([espacioCarpeta(CARPETA_VIDEOS), espacioCarpeta(CARPETA_PORTADAS), espacioCarpeta(CARPETA_PIEZAS)]);
+  let total = 0;
+  let libre = 0;
+  try { const s = await statfs(CARPETA_VIDEOS); total = s.blocks * s.bsize; libre = s.bavail * s.bsize; } catch { /* sistema sin statfs */ }
+  return { videos, portadas, anuncios, total, libre };
+}
+
+const esExterno = (v) => /^https?:\/\//i.test(v || '');
+
+// Pasar una película «desde link» a un archivo guardado en el servidor, sin sacarla de la plataforma mientras baja
+async function guardarEnServidor(p) {
+  const origen = p.video;
+  const trabajo = { estado: 'descargando', tipo: 'guardar', bytes: 0, total: 0, error: null, control: new AbortController() };
+  trabajos.set(p.id, trabajo);
+  const archivo = nombreArchivo(p.id, extDe(origen));
+  try {
+    await descargar(origen, path.join(CARPETA_VIDEOS, archivo), {
+      senal: trabajo.control.signal,
+      alProgreso: (bytes, total) => { trabajo.bytes = bytes; trabajo.total = total || trabajo.total; },
+    });
+    actualizarPelicula(p.id, { video: `videos/${archivo}`, videoOriginal: origen });
+    trabajo.estado = 'listo';
+  } catch (e) {
+    trabajo.estado = 'error';
+    trabajo.error = e instanceof ErrorImportar ? e.message : 'No se pudo guardar el video en el servidor.';
+  }
 }
 
 // Borra un archivo propio (videos/… o portadas/…) cuando se reemplaza o se elimina la película
@@ -97,7 +129,7 @@ async function importar(p, info, modo) {
         senal: trabajo.control.signal,
         alProgreso: (bytes, total) => { trabajo.bytes = bytes; trabajo.total = total || trabajo.total; },
       });
-      actualizarPelicula(p.id, { video: `videos/${archivo}` });
+      actualizarPelicula(p.id, { video: `videos/${archivo}`, videoOriginal: info.video });
     }
     // Queda oculta hasta que el administrador la revise y la publique (o publicada si así se pidió)
     actualizarPelicula(p.id, { estado: info.publicar ? 'publicada' : 'oculta' });
@@ -145,11 +177,72 @@ export async function rutasAdmin(req, res, url) {
     if (!sesionValida(req)) return json(res, 401, { error: 'Iniciá sesión como administrador.' });
 
     if (ruta === '/catalogo') {
+      const extra = {};
+      for (const p of todas()) {
+        const local = p.video?.startsWith('videos/');
+        extra[p.id] = {
+          bytes: local ? (await stat(path.join(CARPETA_VIDEOS, p.video.slice(7))).catch(() => ({ size: 0 }))).size : 0,
+          vistas: vistas(p.id),
+          enlace: esExterno(p.video) ? estadoEnlace(p.id) : null,
+        };
+      }
       return json(res, 200, {
         peliculas: todas(),
-        trabajos: Object.fromEntries([...trabajos].map(([id, t]) => [id, { estado: t.estado, bytes: t.bytes, total: t.total, error: t.error }])),
+        trabajos: Object.fromEntries([...trabajos].map(([id, t]) => [id, { estado: t.estado, tipo: t.tipo || 'importar', bytes: t.bytes, total: t.total, error: t.error }])),
         espacio: await espacioVideos(),
+        extra,
+        disco: await disco(),
       });
+    }
+
+    // Revisa que los videos «desde link» sigan funcionando (de a 4 por vez)
+    if (ruta === '/enlaces/revisar' && req.method === 'POST') {
+      const conLink = todas().filter((p) => esExterno(p.video));
+      const resultados = {};
+      for (let i = 0; i < conLink.length; i += 4) {
+        await Promise.all(conLink.slice(i, i + 4).map(async (p) => {
+          const r = await revisarEnlace(p.video);
+          guardarEnlace(p.id, r);
+          resultados[p.id] = r;
+        }));
+      }
+      const caidos = Object.values(resultados).filter((r) => !r.ok).length;
+      return json(res, 200, { revisados: conLink.length, caidos, resultados });
+    }
+
+    // Cambiar la contraseña del administrador (cierra las demás sesiones abiertas)
+    if (ruta === '/clave' && req.method === 'POST') {
+      if (bloqueado(req)) return json(res, 429, { error: 'Demasiados intentos. Esperá 15 minutos.' });
+      const { actual, nueva } = await leerJSON(req);
+      if (!claveCorrecta(actual)) { fallo(req); return json(res, 403, { error: 'La contraseña actual no es correcta.' }); }
+      if (typeof nueva !== 'string' || nueva.length < 10) return json(res, 400, { error: 'La contraseña nueva tiene que tener al menos 10 caracteres.' });
+      if (nueva === actual) return json(res, 400, { error: 'La contraseña nueva tiene que ser distinta de la actual.' });
+      await definirClave(nueva);
+      const propia = (req.headers.cookie || '').match(/cinetream_admin=([^;]+)/)?.[1];
+      let cerradas = 0;
+      for (const id of [...sesiones.keys()]) if (id !== propia) { sesiones.delete(id); cerradas++; }
+      return json(res, 200, { ok: true, cerradas });
+    }
+    if (ruta === '/sesiones/cerrar' && req.method === 'POST') {
+      const propia = (req.headers.cookie || '').match(/cinetream_admin=([^;]+)/)?.[1];
+      let cerradas = 0;
+      for (const id of [...sesiones.keys()]) if (id !== propia) { sesiones.delete(id); cerradas++; }
+      return json(res, 200, { cerradas });
+    }
+
+    // Suscriptores en una planilla (se abre con Excel o Google Sheets)
+    if (ruta === '/cuentas.csv') {
+      // Un valor que empieza con = + - @ se toma como fórmula en Excel: se le antepone un apóstrofo
+      const celda = (v) => { let t = String(v ?? ''); if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`; return `"${t.replace(/"/g, '""')}"`; };
+      const fecha = (ms) => (ms ? new Date(ms).toISOString().slice(0, 10) : '');
+      const filas = [['Correo', 'Nombre', 'Plan', 'Estado', 'Vence', 'Alta', 'Pago']].concat(todasLasCuentas().map((c) => [
+        c.email, c.nombre, planEfectivo(c).nombre, planEfectivo(c).id === 'gratis' ? '' : c.estado, fecha(c.vence), fecha(c.alta), c.pago?.proveedor || '',
+      ]));
+      res.writeHead(200, {
+        'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+        'Content-Disposition': `attachment; filename="cinetream-suscriptores-${fecha(Date.now())}.csv"`,
+      });
+      return res.end(`\ufeff${filas.map((f) => f.map(celda).join(';')).join('\r\n')}\r\n`);
     }
 
     if (ruta === '/analizar' && req.method === 'POST') {
@@ -192,7 +285,7 @@ export async function rutasAdmin(req, res, url) {
       return json(res, 200, { pelicula: agregarPelicula(datos) });
     }
 
-    const m = ruta.match(/^\/peliculas\/([a-z0-9-]+)(\/portada|\/cancelar)?$/);
+    const m = ruta.match(/^\/peliculas\/([a-z0-9-]+)(\/portada|\/cancelar|\/guardar|\/liberar)?$/);
     if (m) {
       const p = buscarPelicula(m[1]);
       if (!p) return json(res, 404, { error: 'Esa película no existe.' });
@@ -205,9 +298,30 @@ export async function rutasAdmin(req, res, url) {
         trabajos.get(p.id)?.control.abort();
         trabajos.delete(p.id);
         quitarPelicula(p.id);
+        olvidarPelicula(p.id);
         await borrarArchivoPropio(p.video);
         await borrarArchivoPropio(p.portada);
         return json(res, 200, { ok: true });
+      }
+      if (m[2] === '/guardar' && req.method === 'POST') {
+        if (!esExterno(p.video)) return json(res, 400, { error: 'Esta película no se ve desde un link.' });
+        if (trabajos.get(p.id)?.estado === 'descargando') return json(res, 409, { error: 'Ya se está guardando.' });
+        const d = await disco();
+        if (d.total && d.libre < 512 * 1024 ** 2) return json(res, 507, { error: 'Casi no queda lugar en el disco del servidor.' });
+        guardarEnServidor(p);
+        return json(res, 200, { ok: true });
+      }
+      if (m[2] === '/liberar' && req.method === 'POST') {
+        // Vuelve a reproducirse desde el link original y se borra el archivo del servidor
+        if (!p.video?.startsWith('videos/')) return json(res, 400, { error: 'Esta película no está guardada en el servidor.' });
+        if (!esExterno(p.videoOriginal)) return json(res, 400, { error: 'No se conoce el link original de este video: no se puede liberar sin que deje de verse.' });
+        const r = await revisarEnlace(p.videoOriginal);
+        if (!r.ok) return json(res, 409, { error: `El link original ya no funciona (${r.detalle.toLowerCase()}). Si se libera, la película dejaría de verse.` });
+        const archivo = p.video;
+        actualizarPelicula(p.id, { video: p.videoOriginal });
+        guardarEnlace(p.id, r);
+        await borrarArchivoPropio(archivo);
+        return json(res, 200, { pelicula: buscarPelicula(p.id) });
       }
       if (m[2] === '/cancelar' && req.method === 'POST') {
         trabajos.get(p.id)?.control.abort();
@@ -247,6 +361,16 @@ export async function rutasAdmin(req, res, url) {
         cuentas: cuentas.length, nuevas30: cuentas.filter((c) => c.alta > hace30).length, porPlan,
         ingresoMensual: Math.round(mensual), publicidad: stats, campanasActivas: campanas().filter((c) => c.activa).length,
         planes: listaPlanes(), modoPrueba: modoPrueba(),
+        vistasPorDia: vistasPorDia(30),
+        masVistas: todas().map((p) => ({ id: p.id, titulo: p.titulo, anio: p.anio, ...vistas(p.id) }))
+          .filter((p) => p.recientes > 0).sort((a, b) => b.recientes - a.recientes).slice(0, 5),
+        disco: await disco(),
+        catalogo: {
+          publicadas: todas().filter((p) => p.estado === 'publicada').length,
+          enServidor: todas().filter((p) => p.video?.startsWith('videos/')).length,
+          desdeLink: todas().filter((p) => esExterno(p.video)).length,
+          linksCaidos: todas().filter((p) => esExterno(p.video) && estadoEnlace(p.id)?.ok === false).length,
+        },
       });
     }
 
