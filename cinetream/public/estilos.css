@@ -577,3 +577,152 @@ a.btn { color: inherit; text-decoration: none; }
   .foto-fondo { left: 0; width: 100%; opacity: 0.55 !important; }
   .foto-velo { background: linear-gradient(transparent 20%, #0b0c11 92%); }
 }
+
+/* ---------- Bienvenida y planes ---------- */
+.bienvenida { position: relative; min-height: 100vh; display: grid; place-items: center; padding: 3rem var(--margen); overflow: hidden; isolation: isolate; }
+.bienvenida-fondo {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(60% 50% at 85% 10%, #ffb54733, transparent 70%),
+    radial-gradient(50% 60% at 0% 100%, #3a1c4a66, transparent 70%),
+    var(--fondo);
+}
+.bienvenida-fondo::after { content: ""; position: absolute; inset: 0; background: var(--grano); opacity: 0.07; mix-blend-mode: overlay; }
+.bienvenida-cuerpo { width: min(70rem, 100%); display: grid; gap: 1.4rem; justify-items: center; text-align: center; }
+.bienvenida-logo { font-size: 2.4rem; }
+.bienvenida h1 { font: 900 clamp(2.6rem, 6vw, 5rem)/0.95 var(--titulo); text-transform: uppercase; margin: 0; text-wrap: balance; }
+.bienvenida-bajada { color: var(--suave); font-size: 1.15rem; max-width: 40rem; margin: 0; }
+.planes { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; width: 100%; margin-top: 0.6rem; }
+.planes-pagina { padding: 0 var(--margen); width: auto; max-width: 70rem; }
+.plan {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 0.6rem;
+  padding: 1.5rem;
+  border-radius: 1rem;
+  text-align: left;
+  background: var(--superficie);
+  border: 1px solid var(--linea);
+  transition: transform 0.15s, border-color 0.15s;
+}
+.plan:hover, .plan:focus-visible { transform: translateY(-0.2rem); border-color: var(--texto); outline: none; }
+.plan-plus { background: linear-gradient(160deg, #2a1d08, var(--superficie) 60%); border-color: #ffb54766; }
+.plan-plus::before { content: "Recomendado"; position: absolute; top: -0.7rem; right: 1rem; padding: 0.15rem 0.6rem; border-radius: 99rem; background: var(--acento); color: var(--acento-tinta); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.plan-plus + .plan-plus::before { content: "Dos meses de regalo"; }
+.plan-actual { border-color: var(--acento); }
+.plan-nombre { font: 900 1.6rem/1 var(--titulo); text-transform: uppercase; letter-spacing: 0.04em; }
+.plan-precio { color: var(--suave); }
+.plan-precio b { color: var(--texto); font: 800 2rem/1 var(--cuerpo); font-variant-numeric: tabular-nums; margin-right: 0.2rem; }
+.plan-desc { color: var(--suave); font-size: 0.95rem; }
+.plan ul { list-style: none; margin: 0.2rem 0 0; padding: 0; display: grid; gap: 0.35rem; font-size: 0.92rem; }
+.plan-boton { margin-top: 0.6rem; padding: 0.7rem 1rem; border-radius: 0.5rem; text-align: center; font-weight: 700; background: #ffffff1f; }
+.plan-plus .plan-boton { background: var(--acento); color: var(--acento-tinta); }
+.plan-actual .plan-boton { background: none; border: 1px solid var(--acento); color: var(--acento); }
+.bienvenida-acciones { justify-content: center; }
+.nota-prueba { color: var(--tenue); font-size: 0.85rem; margin: 0; }
+
+/* Crear cuenta, ingresar, código de la tele */
+.acceso-espectador, .tv-codigo, .caja-simple {
+  width: min(28rem, 100%);
+  display: grid;
+  gap: 0.7rem;
+  padding: 2rem;
+  border-radius: 1rem;
+  background: #15171fe6;
+  border: 1px solid var(--linea);
+  box-shadow: var(--sombra);
+  backdrop-filter: blur(8px);
+}
+.acceso-espectador h1, .tv-codigo h1, .caja-simple h1 { font: 900 2.2rem/1 var(--titulo); text-transform: uppercase; margin: 0.3rem 0; }
+.acceso-espectador label, .form-simple label { font-size: 0.85rem; font-weight: 600; color: var(--suave); }
+.acceso-espectador input, .form-simple input {
+  font: 500 1.05rem var(--cuerpo);
+  color: var(--texto);
+  background: var(--fondo);
+  border: 0.12rem solid var(--linea);
+  border-radius: 0.5rem;
+  padding: 0.75rem 0.9rem;
+}
+.acceso-espectador input:focus, .form-simple input:focus { border-color: var(--acento); outline: none; }
+.acceso-espectador .btn, .form-simple .btn { justify-content: center; margin-top: 0.4rem; }
+.plan-elegido { margin: 0; padding: 0.7rem 0.9rem; border-radius: 0.5rem; background: #ffb5471a; border: 1px solid #ffb54744; font-size: 0.92rem; }
+.enlace { color: var(--acento); font-weight: 600; text-decoration: underline; text-underline-offset: 0.2em; padding: 0.2rem; justify-self: start; }
+.error-cuenta { color: var(--peligro); min-height: 1.2em; margin: 0; font-size: 0.92rem; }
+.tv-codigo { width: min(38rem, 100%); text-align: center; justify-items: center; }
+.tv-codigo ol { text-align: left; margin: 0; padding-left: 1.4rem; display: grid; gap: 0.3rem; font-size: 1.05rem; }
+.codigo { font: 900 clamp(3rem, 7vw, 5.5rem)/1 var(--titulo); letter-spacing: 0.25em; padding: 1rem 1.6rem 1rem 2rem; border-radius: 0.8rem; background: var(--fondo); border: 0.15rem solid var(--acento); color: var(--acento); }
+
+/* Páginas simples: activar la tele, pago de prueba */
+body.pagina-simple { min-height: 100vh; display: grid; place-items: center; padding: 1.5rem max(16px, env(safe-area-inset-right, 0px)) 1.5rem max(16px, env(safe-area-inset-left, 0px)); background: radial-gradient(60% 50% at 80% 0%, #ffb54726, transparent 70%), var(--fondo); }
+.caja-simple p { margin: 0; color: var(--suave); }
+.form-simple { display: grid; gap: 0.6rem; }
+.entrada-codigo { font: 900 2rem var(--titulo) !important; letter-spacing: 0.3em; text-align: center; text-transform: uppercase; }
+.exito { color: #6fe3ae !important; font-weight: 700; font-size: 1.1rem; }
+.banda-prueba { justify-self: start; padding: 0.25rem 0.7rem; border-radius: 99rem; background: #ffb54726; color: var(--acento) !important; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.08em; }
+.resumen-pago { display: grid; gap: 0.2rem; padding: 1rem; border-radius: 0.6rem; background: var(--fondo); border: 1px solid var(--linea); }
+.resumen-pago b { font-size: 1.15rem; }
+.resumen-pago small { color: var(--suave); }
+
+/* ---------- Plus ---------- */
+.sello-plus, .insignia-plus {
+  font: 900 0.7rem/1 var(--titulo);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 0.3rem 0.55rem;
+  border-radius: 0.3rem;
+  background: var(--acento);
+  color: var(--acento-tinta);
+}
+.tarjeta .sello.sello-plus { background: var(--acento); color: var(--acento-tinta); border: 0; font-size: 0.6rem; }
+.sello-plus.en-linea { margin-left: 0.5rem; vertical-align: middle; }
+.insignia-plus { font-size: 0.8rem; }
+.aviso-plus { margin: 0; padding: 0.8rem 1rem; border-radius: 0.6rem; background: #ffb5471a; border: 1px solid #ffb54755; max-width: 34rem; }
+.cuenta-resumen { display: grid; gap: 0.25rem; padding: 1.1rem 1.2rem; border-radius: 0.8rem; background: var(--superficie); width: 100%; max-width: 40rem; }
+.cuenta-resumen b { font-size: 1.25rem; }
+.cuenta-resumen small { color: var(--suave); display: block; }
+
+/* ---------- Publicidad ---------- */
+.anuncio-etiqueta { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; padding: 0.2rem 0.5rem; border-radius: 0.3rem; background: #000b; color: #fff; }
+.fila-anuncio { padding: 0 var(--margen); }
+.anuncio-banner {
+  position: relative;
+  display: block;
+  height: clamp(7rem, 14vw, 11rem);
+  border-radius: var(--borde);
+  overflow: hidden;
+  color: var(--texto);
+  text-decoration: none;
+  border: 1px solid var(--linea);
+}
+.anuncio-banner:focus-visible { outline: 0.22rem solid var(--texto); outline-offset: 0.2rem; }
+.anuncio-banner .anuncio-etiqueta { position: absolute; z-index: 2; top: 0.7rem; right: 0.7rem; }
+.anuncio-banner .anuncio-mas { position: absolute; z-index: 2; right: 1rem; bottom: 0.9rem; font-weight: 700; font-size: 0.9rem; }
+.anuncio-medio { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
+.anuncio-texto {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  gap: 0.3rem;
+  padding: 1rem 2rem;
+  background: radial-gradient(70% 120% at 100% 50%, color-mix(in srgb, var(--a2) 35%, transparent), transparent 70%), var(--a1);
+}
+.anuncio-texto b { font: 900 clamp(1.6rem, 3.4vw, 3rem)/0.95 var(--titulo); text-transform: uppercase; color: var(--a2); }
+.anuncio-texto span { color: #f3efe7d0; max-width: 40rem; }
+.anuncio-marca { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #ffffff99 !important; }
+.anuncio-previo { position: absolute; inset: 0; background: #000; }
+.anuncio-previo .anuncio-medio { object-fit: contain; }
+.anuncio-previo .anuncio-texto { padding: 0 max(var(--margen), 10vw); gap: 0.8rem; }
+.anuncio-previo .anuncio-texto b { font-size: clamp(2.4rem, 6vw, 5rem); }
+.anuncio-previo .anuncio-texto span { font-size: 1.2rem; }
+.anuncio-barra { position: absolute; top: max(1.2rem, env(safe-area-inset-top, 0px)); left: max(var(--margen), env(safe-area-inset-left, 0px)); display: flex; align-items: center; gap: 0.7rem; }
+.anuncio-cuenta { font-size: 0.9rem; color: #fffc; text-shadow: 0 1px 4px #000; font-variant-numeric: tabular-nums; }
+.anuncio-botones { position: absolute; right: max(var(--margen), env(safe-area-inset-right, 0px)); bottom: max(2.4rem, env(safe-area-inset-bottom, 0px)); display: flex; gap: 0.6rem; }
+.anuncio-botones .btn { background: #000c; border: 1px solid #ffffff55; }
+.anuncio-botones .btn:disabled { opacity: 0.75; cursor: default; }
+.anuncio-botones .btn:focus-visible { background: var(--texto); color: var(--fondo); }
+.anuncio-progreso { position: absolute; inset: auto 0 0; height: 0.3rem; background: #ffffff26; }
+.anuncio-progreso i { display: block; height: 100%; width: 0; background: var(--acento); transition: width 0.25s linear; }

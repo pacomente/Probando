@@ -38,6 +38,30 @@
       <button class="btn contorno" id="salir">Salir</button>
     </header>
 
+    <nav class="secciones" role="tablist" aria-label="Secciones del administrador">
+      <button role="tab" data-seccion="negocio" class="activa">Resumen</button>
+      <button role="tab" data-seccion="catalogo">Catálogo</button>
+      <button role="tab" data-seccion="suscriptores">Suscriptores</button>
+      <button role="tab" data-seccion="publicidad">Publicidad</button>
+      <button role="tab" data-seccion="planes">Planes y pagos</button>
+    </nav>
+
+    <!-- Resumen del negocio -->
+    <div class="seccion" id="seccion-negocio">
+      <div class="aviso-prueba" id="negocio-prueba" hidden>
+        <b>Modo prueba:</b> los pagos se simulan y no se cobra nada. Para cobrar con Mercado Pago, configurá
+        <code>MP_ACCESS_TOKEN</code> (y opcionalmente <code>MP_WEBHOOK_SECRET</code>) antes de arrancar Cinetream. Ver «Planes y pagos».
+      </div>
+      <section class="resumen" id="negocio-datos" aria-label="Indicadores"></section>
+      <section class="tarjeta-panel">
+        <h2>Suscriptores por plan</h2>
+        <div class="barras" id="negocio-planes"></div>
+      </section>
+    </div>
+
+    <!-- Catálogo -->
+    <div class="seccion" id="seccion-catalogo" hidden>
+
     <section class="resumen" id="resumen" aria-label="Resumen del catálogo"></section>
 
     <section class="tarjeta-panel">
@@ -103,7 +127,91 @@
       </div>
       <ul class="catalogo-lista" id="catalogo"></ul>
     </section>
+    </div>
+
+    <!-- Suscriptores -->
+    <div class="seccion" id="seccion-suscriptores" hidden>
+      <section class="tarjeta-panel">
+        <div class="catalogo-cabecera">
+          <h2>Suscriptores</h2>
+          <input id="cuentas-filtro" type="search" placeholder="Buscar por correo o nombre" aria-label="Buscar suscriptores">
+          <select id="cuentas-plan" aria-label="Filtrar por plan"><option value="">Todos los planes</option></select>
+        </div>
+        <p class="nota">Desde acá podés dar o quitar un plan a mano (por ejemplo, si alguien pagó por transferencia o para una cortesía).</p>
+        <div class="tabla-envoltura"><table class="tabla-admin" id="cuentas-tabla"></table></div>
+      </section>
+    </div>
+
+    <!-- Publicidad -->
+    <div class="seccion" id="seccion-publicidad" hidden>
+      <section class="resumen" id="publicidad-datos" aria-label="Resultados de la publicidad"></section>
+      <section class="tarjeta-panel">
+        <div class="catalogo-cabecera">
+          <h2>Campañas</h2>
+          <button class="btn principal" id="campana-nueva">＋ Nueva campaña</button>
+        </div>
+        <p class="nota">La publicidad se muestra solo en el plan Gratis y nunca en perfiles infantiles. «Antes de la película» se puede saltar
+          después de los segundos que elijas; el «banner» aparece en el inicio.</p>
+        <ul class="campanas" id="campanas"></ul>
+      </section>
+    </div>
+
+    <!-- Planes y pagos -->
+    <div class="seccion" id="seccion-planes" hidden>
+      <section class="tarjeta-panel">
+        <h2>Planes y precios</h2>
+        <p class="nota">Los precios son en pesos. Los beneficios de cada plan son fijos: Gratis tiene publicidad; Plus y Plus anual no la tienen y
+          ven los títulos marcados como Plus. Un cambio de precio vale para las suscripciones nuevas.</p>
+        <form id="planes-form" class="planes-admin"></form>
+      </section>
+      <section class="tarjeta-panel">
+        <h2>Cobros con Mercado Pago</h2>
+        <div id="pagos-estado"></div>
+        <ol class="pasos-pago">
+          <li>Creá una aplicación en <b>Mercado Pago Developers</b> (Tus integraciones) y copiá el <b>Access Token</b> de producción.</li>
+          <li>Arrancá Cinetream con <code>MP_ACCESS_TOKEN=tu_token</code> (en Windows, agregalo en <code>Ver-Cinetream.bat</code> con <code>set MP_ACCESS_TOKEN=…</code>).</li>
+          <li>En la aplicación de Mercado Pago, configurá las notificaciones (webhooks) del tema <b>Suscripciones</b> hacia <code>https://tu-dominio/api/pagos/mercadopago</code> y copiá la clave secreta en <code>MP_WEBHOOK_SECRET</code>.</li>
+          <li>Para cobrar, Cinetream tiene que estar publicado en internet con HTTPS (un servidor o un servicio de hosting), no solo en la red de tu casa.</li>
+        </ol>
+      </section>
+    </div>
   </div>
+
+  <dialog class="editor" id="campana-editor">
+    <form class="editor-form" id="campana-form">
+      <div class="editor-cabecera"><h2 id="campana-titulo">Nueva campaña</h2><button type="button" class="btn contorno" id="campana-cerrar" aria-label="Cerrar">✕</button></div>
+      <div class="editor-cuerpo">
+        <div class="editor-portada">
+          <div class="campana-vista" id="campana-vista"></div>
+          <div class="editor-portada-botones" id="campana-pieza-botones">
+            <label class="btn">Subir imagen o video<input type="file" id="campana-pieza" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" hidden></label>
+            <button type="button" class="btn" id="campana-quitar-pieza">Usar aviso de texto</button>
+          </div>
+          <p class="nota" id="campana-pieza-nota">Sin imagen ni video, se muestra un aviso de texto con los colores de la campaña.</p>
+          <div class="editor-colores">
+            <label>Fondo <input type="color" name="color0"></label>
+            <label>Acento <input type="color" name="color1"></label>
+          </div>
+        </div>
+        <div class="alta-campos">
+          <label class="ancho">Nombre interno<input name="nombre" required maxlength="80" placeholder="Ej.: Pizzería del centro · noviembre"></label>
+          <label>Anunciante<input name="anunciante" maxlength="80"></label>
+          <label>Formato<select name="tipo"><option value="previo">Antes de la película</option><option value="banner">Banner en el inicio</option></select></label>
+          <label class="ancho">Título del aviso<input name="titulo" maxlength="80"></label>
+          <label class="ancho">Texto<input name="texto" maxlength="200"></label>
+          <label class="ancho">Link (opcional)<input name="enlace" type="url" maxlength="500" placeholder="https://"></label>
+          <label>Duración (s, avisos con imagen o texto)<input name="duracion" type="number" min="3" max="60"></label>
+          <label>Se puede saltar a los (s)<input name="saltarTras" type="number" min="0" max="30"></label>
+          <label>Peso (1 a 10: cuántas veces sale frente a otras)<input name="peso" type="number" min="1" max="10"></label>
+          <label>Desde<input name="desde" type="date"></label>
+          <label>Hasta<input name="hasta" type="date"></label>
+          <label class="tilde"><input type="checkbox" name="activa"> Activa</label>
+        </div>
+      </div>
+      <div class="acciones"><button class="btn principal">Guardar campaña</button><button type="button" class="btn" id="campana-cancelar">Cancelar</button></div>
+      <p class="error" id="campana-error" role="alert"></p>
+    </form>
+  </dialog>
 
   <dialog class="editor" id="editor">
     <form method="dialog" class="editor-form" id="editor-form">

@@ -85,6 +85,7 @@ function campos(d = {}) {
     <label class="ancho">Licencia<input name="licencia" maxlength="120" value="${esc(d.licencia)}" placeholder="Dominio público, CC BY 4.0…"></label>
     <label class="ancho">Sinopsis<textarea name="sinopsis" rows="4" maxlength="1200">${esc(d.sinopsis)}</textarea></label>
     <label class="tilde"><input type="checkbox" name="destacada" ${d.destacada ? 'checked' : ''}> Destacada en la portada</label>
+    <label class="tilde"><input type="checkbox" name="plus" ${d.plus ? 'checked' : ''}> Solo para suscriptores Plus</label>
     ${d.publicar === undefined ? '' : `<label class="tilde"><input type="checkbox" name="publicar" ${d.publicar ? 'checked' : ''}> Publicar apenas esté lista</label>`}`;
 }
 function leerCampos(raiz) {
@@ -100,6 +101,7 @@ function leerCampos(raiz) {
     licencia: v('licencia').value.trim(),
     sinopsis: v('sinopsis').value.trim(),
     destacada: v('destacada').checked,
+    plus: v('plus').checked,
     ...(v('publicar') ? { publicar: v('publicar').checked } : {}),
   };
 }
@@ -464,7 +466,225 @@ function mostrarPanel() {
   $('#acceso').hidden = true;
   $('#panel').hidden = false;
   cargar();
+  cargarNegocio();
 }
+
+// ---------- Secciones ----------
+const pesos = (n) => `$ ${Math.round(n).toLocaleString('es-AR')}`;
+const fechaCorta = (ms) => (ms ? new Date(ms).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—');
+const dato = (titulo, valor, detalle = '') => `<div class="dato"><b>${esc(valor)}</b><span>${esc(titulo)}</span>${detalle ? `<small>${esc(detalle)}</small>` : ''}</div>`;
+
+document.querySelectorAll('[data-seccion]').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-seccion]').forEach((x) => { x.classList.toggle('activa', x === b); x.setAttribute('aria-selected', String(x === b)); });
+  document.querySelectorAll('.seccion').forEach((sec) => { sec.hidden = sec.id !== `seccion-${b.dataset.seccion}`; });
+  ({ negocio: cargarNegocio, catalogo: cargar, suscriptores: cargarCuentas, publicidad: cargarPublicidad, planes: cargarPlanes })[b.dataset.seccion]?.();
+}));
+
+// ---------- Resumen del negocio ----------
+let negocio = null;
+async function cargarNegocio() {
+  negocio = await api('/resumen');
+  const plus = (negocio.porPlan.plus || 0) + (negocio.porPlan['plus-anual'] || 0);
+  const p = negocio.publicidad;
+  $('#negocio-prueba').hidden = !negocio.modoPrueba;
+  $('#negocio-datos').innerHTML = [
+    dato('Suscriptores Plus', plus, `de ${negocio.cuentas} cuentas`),
+    dato('Cuentas nuevas', negocio.nuevas30, 'últimos 30 días'),
+    dato('Ingreso mensual estimado', pesos(negocio.ingresoMensual), negocio.modoPrueba ? 'con pagos de prueba' : 'planes vigentes'),
+    dato('Avisos mostrados', p.impresiones.toLocaleString('es-AR'), `${negocio.campanasActivas} campañas activas`),
+    dato('Clics en avisos', p.clics.toLocaleString('es-AR'), p.impresiones ? `${((p.clics / p.impresiones) * 100).toFixed(1).replace('.', ',')}% de los mostrados` : 'sin datos todavía'),
+  ].join('');
+  const total = Math.max(1, negocio.cuentas);
+  $('#negocio-planes').innerHTML = negocio.planes.map((pl) => {
+    const n = negocio.porPlan[pl.id] || 0;
+    return `<div class="barra-plan"><span>${esc(pl.nombre)}</span><div><i style="width:${(n / total) * 100}%"></i></div><b>${n}</b></div>`;
+  }).join('') || '<p class="nota">Todavía no hay cuentas.</p>';
+}
+
+// ---------- Suscriptores ----------
+let cuentasLista = [];
+async function cargarCuentas() {
+  cuentasLista = (await api('/cuentas')).cuentas;
+  if (!negocio) await cargarNegocio();
+  const filtroPlan = $('#cuentas-plan');
+  if (filtroPlan.options.length === 1) filtroPlan.insertAdjacentHTML('beforeend', negocio.planes.map((pl) => `<option value="${esc(pl.id)}">${esc(pl.nombre)}</option>`).join(''));
+  pintarCuentas();
+}
+function pintarCuentas() {
+  const texto = $('#cuentas-filtro').value.trim().toLowerCase();
+  const plan = $('#cuentas-plan').value;
+  const nombrePlan = (id) => negocio?.planes.find((p) => p.id === id)?.nombre || id;
+  const lista = cuentasLista.filter((c) => (!plan || c.planEfectivo === plan) && (!texto || `${c.email} ${c.nombre}`.toLowerCase().includes(texto)));
+  const ESTADOS = { activa: 'Activa', cancelada: 'No renueva', vencida: 'Vencida' };
+  $('#cuentas-tabla').innerHTML = `<thead><tr><th>Cuenta</th><th>Plan</th><th>Estado</th><th>Vence</th><th>Alta</th><th>Pago</th><th>Cambiar a mano</th></tr></thead>
+    <tbody>${lista.length ? lista.map((c) => `<tr data-id="${esc(c.id)}">
+      <td><b>${esc(c.email)}</b>${c.nombre ? `<small>${esc(c.nombre)}</small>` : ''}</td>
+      <td><span class="estado ${c.planEfectivo === 'gratis' ? 'estado-oculta' : 'estado-publicada'}">${esc(nombrePlan(c.planEfectivo))}</span></td>
+      <td>${esc(c.planEfectivo === 'gratis' ? '—' : ESTADOS[c.estado] || c.estado)}</td>
+      <td>${esc(c.planEfectivo === 'gratis' ? '—' : fechaCorta(c.vence))}</td>
+      <td>${esc(fechaCorta(c.alta))}</td>
+      <td>${esc(c.pago ? `${{ mercadopago: 'Mercado Pago', prueba: 'Prueba', manual: 'Manual' }[c.pago.proveedor] || c.pago.proveedor}` : '—')}</td>
+      <td class="cambiar"><select aria-label="Plan">${negocio.planes.map((pl) => `<option value="${esc(pl.id)}" ${pl.id === c.planEfectivo ? 'selected' : ''}>${esc(pl.nombre)}</option>`).join('')}</select>
+        <input type="number" min="1" max="3660" value="30" aria-label="Días"> días <button class="btn" data-accion="aplicar">Aplicar</button></td>
+    </tr>`).join('') : '<tr><td colspan="7" class="nota">No hay cuentas con ese filtro.</td></tr>'}</tbody>`;
+}
+$('#cuentas-filtro').addEventListener('input', pintarCuentas);
+$('#cuentas-plan').addEventListener('change', pintarCuentas);
+$('#cuentas-tabla').addEventListener('click', async (e) => {
+  if (!e.target.closest('[data-accion="aplicar"]')) return;
+  const fila = e.target.closest('tr');
+  try {
+    await enviar(`/cuentas/${fila.dataset.id}`, 'PUT', { plan: fila.querySelector('select').value, dias: fila.querySelector('input').value });
+    avisar('Plan actualizado');
+    await cargarCuentas();
+    await cargarNegocio();
+  } catch (err) { avisar(err.message); }
+});
+
+// ---------- Publicidad ----------
+let campanasLista = [];
+async function cargarPublicidad() {
+  campanasLista = (await api('/publicidad')).campanas;
+  const t = campanasLista.reduce((a, c) => ({ i: a.i + c.stats.impresiones, c: a.c + c.stats.clics, v: a.v + c.stats.completos }), { i: 0, c: 0, v: 0 });
+  $('#publicidad-datos').innerHTML = [
+    dato('Avisos mostrados', t.i.toLocaleString('es-AR')),
+    dato('Clics', t.c.toLocaleString('es-AR'), t.i ? `${((t.c / t.i) * 100).toFixed(1).replace('.', ',')}% de los mostrados` : ''),
+    dato('Vistos completos', t.v.toLocaleString('es-AR'), 'avisos antes de la película'),
+    dato('Campañas activas', campanasLista.filter((c) => c.activa).length, `de ${campanasLista.length}`),
+  ].join('');
+  $('#campanas').innerHTML = campanasLista.length ? campanasLista.map((c) => `<li class="campana" data-id="${esc(c.id)}">
+      <div class="campana-mini">${vistaCampana(c)}</div>
+      <div class="fila-datos">
+        <b>${esc(c.nombre)}</b>
+        <span>${esc([c.anunciante, c.tipo === 'banner' ? 'Banner en el inicio' : 'Antes de la película', c.desde || c.hasta ? `${fechaCorta(c.desde)} → ${fechaCorta(c.hasta)}` : 'Sin fechas'].filter(Boolean).join(' · '))}</span>
+        <span class="nota">${c.stats.impresiones.toLocaleString('es-AR')} mostrados · ${c.stats.clics.toLocaleString('es-AR')} clics${c.tipo === 'previo' ? ` · ${c.stats.completos.toLocaleString('es-AR')} completos` : ''}</span>
+      </div>
+      <span class="estado ${c.activa ? 'estado-publicada' : 'estado-oculta'}">${c.activa ? 'Activa' : 'Pausada'}</span>
+      <div class="fila-acciones">
+        <button class="btn" data-accion="editar">Editar</button>
+        <button class="btn" data-accion="${c.activa ? 'pausar' : 'activar'}">${c.activa ? 'Pausar' : 'Activar'}</button>
+        <button class="btn peligro" data-accion="eliminar">Eliminar</button>
+      </div></li>`).join('') : '<li class="vacio"><b>Todavía no hay campañas</b></li>';
+}
+
+function vistaCampana(c) {
+  if (c.pieza && c.piezaTipo === 'imagen') return `<img src="${esc(c.pieza)}" alt="">`;
+  if (c.pieza && c.piezaTipo === 'video') return `<video src="${esc(c.pieza)}" muted preload="metadata"></video>`;
+  return `<div class="anuncio-texto" style="--a1:${esc(c.colores?.[0])};--a2:${esc(c.colores?.[1])}"><span class="anuncio-marca">${esc(c.anunciante)}</span><b>${esc(c.titulo || c.nombre)}</b><span>${esc(c.texto)}</span></div>`;
+}
+
+const confirmarCampana = new Map();
+$('#campanas').addEventListener('click', async (e) => {
+  const boton = e.target.closest('[data-accion]');
+  if (!boton) return;
+  const id = boton.closest('[data-id]').dataset.id;
+  const c = campanasLista.find((x) => x.id === id);
+  try {
+    if (boton.dataset.accion === 'editar') { abrirCampana(c); return; }
+    if (boton.dataset.accion === 'pausar' || boton.dataset.accion === 'activar') await enviar(`/publicidad/${id}`, 'PUT', { datos: { activa: boton.dataset.accion === 'activar' } });
+    if (boton.dataset.accion === 'eliminar') {
+      if (!confirmarCampana.has(id)) {
+        boton.textContent = '¿Seguro? Clic de nuevo';
+        confirmarCampana.set(id, setTimeout(() => { confirmarCampana.delete(id); boton.textContent = 'Eliminar'; }, 4000));
+        return;
+      }
+      clearTimeout(confirmarCampana.get(id));
+      confirmarCampana.delete(id);
+      await api(`/publicidad/${id}`, { method: 'DELETE' });
+      avisar(`Se eliminó «${c.nombre}»`);
+    }
+    await cargarPublicidad();
+  } catch (err) { avisar(err.message); }
+});
+
+let campana = null;
+const aFecha = (ms) => (ms ? new Date(ms).toISOString().slice(0, 10) : '');
+function abrirCampana(c = null) {
+  campana = c ? structuredClone(c) : { activa: true, tipo: 'previo', duracion: 6, saltarTras: 5, peso: 1, colores: ['#1d1203', '#ffb547'] };
+  const f = $('#campana-form');
+  $('#campana-titulo').textContent = c ? 'Editar campaña' : 'Nueva campaña';
+  for (const n of ['nombre', 'anunciante', 'tipo', 'titulo', 'texto', 'enlace', 'duracion', 'saltarTras', 'peso']) f.elements[n].value = campana[n] ?? '';
+  f.elements.desde.value = aFecha(campana.desde);
+  f.elements.hasta.value = aFecha(campana.hasta);
+  f.elements.activa.checked = Boolean(campana.activa);
+  f.elements.color0.value = campana.colores?.[0] || '#1d1203';
+  f.elements.color1.value = campana.colores?.[1] || '#ffb547';
+  $('#campana-error').textContent = '';
+  $('#campana-pieza-botones').hidden = !c; // la pieza se sube después de crear la campaña
+  $('#campana-pieza-nota').textContent = c ? 'Sin imagen ni video, se muestra un aviso de texto con los colores de la campaña.' : 'Guardá la campaña para poder subir una imagen o un video.';
+  pintarVistaCampana();
+  $('#campana-editor').showModal();
+}
+function datosCampana() {
+  const f = $('#campana-form').elements;
+  return {
+    nombre: f.nombre.value.trim(), anunciante: f.anunciante.value.trim(), tipo: f.tipo.value, titulo: f.titulo.value.trim(), texto: f.texto.value.trim(),
+    enlace: f.enlace.value.trim(), duracion: f.duracion.value, saltarTras: f.saltarTras.value, peso: f.peso.value,
+    desde: f.desde.value || null, hasta: f.hasta.value || null, activa: f.activa.checked, colores: [f.color0.value, f.color1.value],
+  };
+}
+function pintarVistaCampana() { $('#campana-vista').innerHTML = vistaCampana({ ...campana, ...datosCampana() }); }
+$('#campana-form').addEventListener('input', pintarVistaCampana);
+$('#campana-nueva').addEventListener('click', () => abrirCampana());
+$('#campana-cerrar').addEventListener('click', () => $('#campana-editor').close());
+$('#campana-cancelar').addEventListener('click', () => $('#campana-editor').close());
+$('#campana-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const datos = datosCampana();
+  if (!datos.nombre) { $('#campana-error').textContent = 'Poné un nombre a la campaña.'; return; }
+  try {
+    if (campana.id) await enviar(`/publicidad/${campana.id}`, 'PUT', { datos });
+    else campana = (await enviar('/publicidad', 'POST', { datos })).campana;
+    $('#campana-editor').close();
+    avisar('Campaña guardada');
+    await cargarPublicidad();
+  } catch (err) { $('#campana-error').textContent = err.message; }
+});
+$('#campana-pieza').addEventListener('change', async (e) => {
+  const archivo = e.target.files[0];
+  if (!archivo || !campana?.id) return;
+  $('#campana-pieza-nota').textContent = 'Subiendo…';
+  try {
+    campana = (await api(`/publicidad/${campana.id}/pieza`, { method: 'PUT', headers: { 'Content-Type': archivo.type }, body: archivo })).campana;
+    $('#campana-pieza-nota').textContent = `Pieza cargada: ${archivo.type.startsWith('video') ? 'video' : 'imagen'}.`;
+    pintarVistaCampana();
+    cargarPublicidad();
+  } catch (err) { $('#campana-pieza-nota').textContent = err.message; }
+  e.target.value = '';
+});
+$('#campana-quitar-pieza').addEventListener('click', async () => {
+  if (!campana?.id) return;
+  campana = (await api(`/publicidad/${campana.id}/pieza`, { method: 'DELETE' })).campana;
+  pintarVistaCampana();
+  cargarPublicidad();
+});
+
+// ---------- Planes y pagos ----------
+async function cargarPlanes() {
+  negocio = await api('/resumen');
+  $('#planes-form').innerHTML = negocio.planes.map((pl) => `
+    <fieldset class="plan-admin" data-id="${esc(pl.id)}">
+      <legend>${esc(pl.id === 'gratis' ? 'Gratis (con publicidad)' : pl.id === 'plus' ? 'Plus mensual' : 'Plus anual')}</legend>
+      <label>Nombre<input name="nombre" maxlength="40" value="${esc(pl.nombre)}"></label>
+      <label>Precio ($ por ${esc(pl.periodo)})<input name="precio" type="number" min="0" step="1" value="${esc(pl.precio)}" ${pl.id === 'gratis' ? 'disabled' : ''}></label>
+      <label class="ancho">Descripción<input name="descripcion" maxlength="200" value="${esc(pl.descripcion)}"></label>
+      ${pl.id === 'gratis' ? '' : `<label class="tilde"><input type="checkbox" name="oculto" ${pl.oculto ? 'checked' : ''}> No ofrecer este plan por ahora</label>`}
+    </fieldset>`).join('') + '<div class="acciones"><button class="btn principal">Guardar planes</button></div>';
+  $('#pagos-estado').innerHTML = negocio.modoPrueba
+    ? '<p class="aviso-prueba"><b>Modo prueba activo:</b> nadie paga de verdad; el pago se simula en una página de prueba.</p>'
+    : '<p class="aviso-ok"><b>Mercado Pago conectado:</b> las suscripciones se cobran y se renuevan solas.</p>';
+}
+$('#planes-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const planes = [...document.querySelectorAll('.plan-admin')].map((f) => ({
+    id: f.dataset.id,
+    nombre: f.querySelector('[name="nombre"]').value,
+    precio: f.querySelector('[name="precio"]').value,
+    descripcion: f.querySelector('[name="descripcion"]').value,
+    oculto: f.querySelector('[name="oculto"]')?.checked || false,
+  }));
+  try { await enviar('/planes', 'PUT', { planes }); avisar('Planes guardados'); await cargarPlanes(); } catch (err) { avisar(err.message); }
+});
 
 // Mientras haya descargas, el avance se actualiza solo
 setInterval(() => {

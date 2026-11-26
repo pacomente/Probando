@@ -18,6 +18,8 @@ o el dedo, y se puede instalar como app.
 | ⚙ **Ajustes** | Cambiar o editar el perfil, reproducción automática de la siguiente, animaciones y borrar el historial. |
 | 📺 **Control remoto** | Flechas, OK y Volver, incluidas las teclas de Samsung (Tizen), LG (webOS) y Android TV, y las de reproducción. Las filas recuerdan la última tarjeta marcada. |
 | 📱 **Celular** | Cinco pestañas abajo, filas que se deslizan con el dedo, doble toque a los costados del video para saltar 10 s y botón «atrás» del teléfono. |
+| 💳 **Planes** | Gratis con publicidad, Plus y Plus anual. Cuenta propia, ingreso en la tele con un código desde el celular, cobro con Mercado Pago. |
+| 📢 **Publicidad** | Avisos antes de la película (se saltan a los pocos segundos) y banners en el inicio, con estadísticas por campaña. |
 | 🎨 **Afiches propios** | Ilustraciones dibujadas por la app con los colores de cada película, con luz, viñeta y grano de película: no se usan imágenes con derechos de terceros. |
 
 ## Administrador: cómo agregar películas
@@ -86,6 +88,60 @@ y **clásicos mudos en dominio público** (Nosferatu, El gabinete del Dr. Caliga
 | Volver / Esc | Pantalla anterior | Salir y guardar por dónde ibas |
 | ⏯ ⏪ ⏩ ⏹ del control | | Pausar, retroceder o adelantar 30 s, salir |
 
+## Suscripción y publicidad
+
+Cinetream tiene dos formas de ganar plata, que se combinan:
+
+| Plan | Qué incluye | Precio inicial |
+|---|---|---|
+| **Gratis** | Todo el catálogo común, con publicidad. | $ 0 |
+| **Plus** | Sin publicidad y con los títulos marcados «Solo Plus». | $ 2.999 por mes |
+| **Plus anual** | Lo mismo que Plus, pagando el año (dos meses gratis). | $ 29.990 por año |
+
+Nombres, precios y descripciones se cambian en **Administrador → Planes y pagos**.
+
+- **Cuentas**: la primera vez la plataforma pide crear una cuenta (correo y contraseña) y elegir plan.
+  En la tele no hace falta escribir: aparece un código de 6 letras, se abre `/activar.html` en el celular y se escribe ahí.
+- **Títulos Plus**: en el editor de cada película está la tilde «Solo para suscriptores Plus». Los demás ven el título con
+  un candado y la invitación a pasarse a Plus; el servidor no les entrega el video.
+- **Cancelar**: desde Perfil → Ajustes. El plan sigue hasta el último día pago y después pasa solo a Gratis.
+
+### Cobrar con Mercado Pago
+
+Mientras no se configure, Cinetream funciona en **modo prueba**: el pago se simula en una página y nadie paga de verdad.
+Para cobrar de verdad (débito automático mes a mes o año a año):
+
+1. En <https://www.mercadopago.com.ar/developers> creá una aplicación y copiá el **Access Token** de producción.
+2. Configurá las notificaciones (webhooks) del tema **Suscripciones** hacia `https://tu-dominio/api/pagos/mercadopago`
+   y copiá la clave secreta.
+3. Arrancá el servidor así:
+
+   ```bash
+   MP_ACCESS_TOKEN=APP_USR-... MP_WEBHOOK_SECRET=... node server.js
+   ```
+
+El servidor necesita un dominio con **https** para que Mercado Pago pueda avisar los cobros.
+Al volver del pago y cada vez que llega un aviso, Cinetream le pregunta a Mercado Pago el estado real antes de activar nada.
+Desde **Suscriptores** también se puede dar un plan a mano (por ejemplo, alguien que pagó por transferencia o una cortesía).
+
+### Publicidad
+
+En **Administrador → Publicidad** se cargan las campañas de los anunciantes:
+
+- **Antes de la película**: un aviso de imagen, video o texto que se puede saltar después de los segundos que elijas.
+  Sale como mucho uno cada 15 minutos.
+- **Banner en el inicio**: una franja entre las filas de películas.
+- Cada campaña tiene fechas de inicio y fin, un peso (cuántas veces sale frente a otras) y un link opcional.
+- Se cuentan las veces que se mostró, los clics y cuántos lo vieron completo, para pasarle el informe al anunciante.
+- Nunca se muestra publicidad a suscriptores Plus ni en perfiles infantiles.
+
+Vienen dos campañas propias que invitan a pasarse a Plus; se pueden pausar o editar.
+
+### Resumen del negocio
+
+La primera pantalla del administrador muestra suscriptores Plus, cuentas nuevas del mes, ingreso mensual estimado,
+avisos mostrados y clics, y cómo se reparten las cuentas entre los planes.
+
 ## Para un servicio comercial
 
 Esto es la plataforma (la parte que ve el público). Para venderla como servicio falta:
@@ -93,7 +149,8 @@ Esto es la plataforma (la parte que ve el público). Para venderla como servicio
 - **Derechos del contenido** que se vaya a ofrecer.
 - **Hosting de video**: los videos se sirven desde un CDN o un servicio de video (por ejemplo Cloudflare Stream, Mux o
   Bunny Stream) con calidad adaptable (HLS), en lugar de archivos sueltos.
-- **Cuentas y pagos** si es por suscripción.
+- **Facturación** (AFIP) de las suscripciones y la publicidad.
+- **Base de datos** (por ejemplo PostgreSQL) si se pasa de unos miles de cuentas: hoy se guardan en `datos/cuentas.json`.
 - **Apps de las tiendas** de Samsung, LG o Google TV: se arman empaquetando esta misma web con las herramientas de cada marca.
 
 ## Archivos
@@ -104,6 +161,12 @@ Esto es la plataforma (la parte que ve el público). Para venderla como servicio
 | `admin.js` | Rutas del administrador: contraseña, importar, subir, editar y eliminar. |
 | `importar.js` | Análisis de links (Internet Archive, archivo directo, página con video) y descargas. |
 | `datos.js` | Catálogo y contraseña guardados en `datos/`. |
+| `cuentas.js` | Cuentas, planes, sesiones y código para la tele. |
+| `pagos.js` | Suscripciones con Mercado Pago (o el modo prueba). |
+| `publicidad.js` | Campañas, piezas y estadísticas de publicidad. |
+| `rutas-cuenta.js` | Rutas del público: cuenta, planes, pagos y avisos. |
+| `public/cuenta.js` · `anuncios.js` | Pantallas de bienvenida y planes; avisos antes de la película y banners. |
+| `public/activar.html` · `pago-prueba.html` | Activar la tele desde el celular; pago simulado del modo prueba. |
 | `public/admin.html` · `admin.js` · `admin.css` | La página del administrador. |
 | `public/catalogo.js` | Películas de ejemplo (el catálogo inicial) y filas del inicio. |
 | `public/app.js` | Pantallas, perfiles, búsqueda, Mi lista y Seguir viendo. |

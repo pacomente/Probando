@@ -10,6 +10,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CARPETA_PORTADAS, CARPETA_VIDEOS, publicadas } from './datos.js';
 import { rutasAdmin } from './admin.js';
+import { rutasCuenta } from './rutas-cuenta.js';
+import { cuentaDe, planEfectivo } from './cuentas.js';
+import { CARPETA_PIEZAS } from './publicidad.js';
+import { modoPrueba } from './pagos.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3500;
@@ -71,9 +75,21 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   try {
     // Catálogo público: solo las películas publicadas
+    // Catálogo público: solo las películas publicadas. Los títulos Plus llegan sin su video a quien no es Plus
     if (url.pathname === '/api/catalogo') {
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-cache', ...SEGURIDAD });
-      return res.end(JSON.stringify({ peliculas: publicadas().map(({ fuente, estado, ...p }) => p) }));
+      const plus = planEfectivo(cuentaDe(req)).plus;
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEGURIDAD });
+      return res.end(JSON.stringify({ peliculas: publicadas().map(({ fuente, estado, ...p }) => (p.plus && !plus ? { ...p, video: null, bloqueada: true } : p)) }));
+    }
+    // Cuenta, planes, pagos y publicidad
+    if (/^\/api\/(cuenta|planes|anuncios|pagos)(\/|$)/.test(url.pathname)) return await rutasCuenta(req, res, url);
+    if (url.pathname.startsWith('/anuncios/')) {
+      const archivo = dentroDe(CARPETA_PIEZAS, url.pathname.slice('/anuncios/'.length));
+      if (!archivo) { res.writeHead(403, SEGURIDAD); return res.end(); }
+      if (/\.(mp4|webm|m4v|mov)$/i.test(archivo)) return await servirVideo(req, res, archivo);
+      const contenido = await readFile(archivo);
+      res.writeHead(200, { 'Content-Type': TIPOS[path.extname(archivo).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'public, max-age=86400', ...SEGURIDAD });
+      return res.end(contenido);
     }
     // Administrador
     if (url.pathname.startsWith('/api/admin/') || url.pathname === '/admin.html') {
@@ -93,6 +109,13 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/videos/')) {
       const archivo = dentroDe(VIDEOS_DIR, url.pathname.slice('/videos/'.length));
       if (!archivo) { res.writeHead(403, SEGURIDAD); return res.end(); }
+      // Los títulos Plus solo se sirven a cuentas Plus: el bloqueo es en el servidor, no solo en la pantalla
+      const ruta = `videos/${path.basename(archivo)}`;
+      const peli = publicadas().find((p) => p.video === ruta);
+      if (peli?.plus && !planEfectivo(cuentaDe(req)).plus) {
+        res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8', ...SEGURIDAD });
+        return res.end('Este título es solo para suscriptores Plus.');
+      }
       return await servirVideo(req, res, archivo);
     }
     const archivo = dentroDe(PUBLIC_DIR, url.pathname === '/' ? 'index.html' : url.pathname.slice(1));
@@ -109,6 +132,9 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, HOST, () => {
   console.log(`🎬 Cinetream → http://localhost:${PORT}`);
   console.log(`   Administrador (desde esta PC) → http://localhost:${PORT}/admin.html`);
+  console.log(modoPrueba()
+    ? '   Pagos: MODO PRUEBA (no se cobra). Para cobrar, configurá MP_ACCESS_TOKEN de Mercado Pago.'
+    : '   Pagos: Mercado Pago activo.');
   // Direcciones para abrirla desde la tele o el celular en la misma red
   for (const lista of Object.values(os.networkInterfaces())) {
     for (const red of lista || []) {

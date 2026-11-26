@@ -113,3 +113,52 @@ body.admin { font-size: 15px; min-height: 100vh; }
   .editor-portada .afiche { width: 9rem; }
   .buscar-link { flex-direction: column; }
 }
+
+/* ---------- Secciones del administrador ---------- */
+.secciones { display: flex; gap: 0.3rem; flex-wrap: wrap; border-bottom: 1px solid var(--linea); }
+.secciones button { padding: 0.7rem 1.1rem; font-weight: 600; color: var(--suave); border-bottom: 0.18rem solid transparent; margin-bottom: -1px; }
+.secciones button.activa { color: var(--texto); border-bottom-color: var(--acento); }
+.secciones button:hover { color: var(--texto); }
+.seccion { display: grid; gap: 1.4rem; }
+.dato small { color: var(--tenue); font-size: 0.78rem; }
+.aviso-prueba, .aviso-ok { margin: 0; padding: 0.9rem 1.1rem; border-radius: 0.7rem; font-size: 0.92rem; }
+.aviso-prueba { background: #ffb5471a; border: 1px solid #ffb54755; }
+.aviso-ok { background: #3ddc971a; border: 1px solid #3ddc9755; }
+.admin code { font: 600 0.85em ui-monospace, Menlo, monospace; background: var(--fondo); padding: 0.1rem 0.35rem; border-radius: 0.3rem; }
+.barras { display: grid; gap: 0.6rem; }
+.barra-plan { display: grid; grid-template-columns: 9rem 1fr 3rem; gap: 0.8rem; align-items: center; }
+.barra-plan div { height: 0.7rem; border-radius: 99rem; background: var(--fondo); overflow: hidden; }
+.barra-plan i { display: block; height: 100%; background: var(--acento); border-radius: inherit; }
+.barra-plan b { text-align: right; font-variant-numeric: tabular-nums; }
+
+.tabla-envoltura { overflow-x: auto; }
+.tabla-admin { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.tabla-admin th { text-align: left; color: var(--suave); font-weight: 600; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--linea); white-space: nowrap; }
+.tabla-admin td { padding: 0.6rem; border-bottom: 1px solid var(--linea); vertical-align: middle; font-variant-numeric: tabular-nums; }
+.tabla-admin td small { display: block; color: var(--suave); }
+.tabla-admin .cambiar { white-space: nowrap; }
+.tabla-admin .cambiar select { width: auto !important; display: inline-block; }
+.tabla-admin .cambiar input { width: 4.5rem !important; display: inline-block; }
+
+.campanas { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.campana { display: grid; grid-template-columns: 11rem minmax(0, 1fr) auto auto; gap: 1rem; align-items: center; padding: 0.6rem; border-radius: 0.7rem; background: var(--fondo); border: 1px solid var(--linea); }
+.campana-mini, .campana-vista { position: relative; aspect-ratio: 16 / 9; border-radius: 0.45rem; overflow: hidden; background: #000; }
+.campana-mini img, .campana-mini video, .campana-vista img, .campana-vista video { width: 100%; height: 100%; object-fit: cover; }
+.campana-mini .anuncio-texto { padding: 0.5rem 0.7rem; gap: 0.1rem; }
+.campana-mini .anuncio-texto b { font-size: 1rem; }
+.campana-mini .anuncio-texto span:not(.anuncio-marca), .campana-mini .anuncio-marca { font-size: 0.6rem; }
+.campana-vista .anuncio-texto { padding: 0.8rem 1rem; }
+.campana-vista .anuncio-texto b { font-size: 1.3rem; }
+.campana-vista .anuncio-texto span { font-size: 0.75rem; }
+
+.planes-admin { display: grid; gap: 1rem; }
+.plan-admin { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; border: 1px solid var(--linea); border-radius: 0.7rem; padding: 1rem; margin: 0; }
+.plan-admin legend { font-weight: 700; padding: 0 0.4rem; }
+.plan-admin .ancho { grid-column: 1 / -1; }
+.pasos-pago { margin: 0; padding-left: 1.3rem; display: grid; gap: 0.5rem; color: var(--suave); font-size: 0.92rem; }
+.pasos-pago b { color: var(--texto); }
+@media (max-width: 760px) {
+  .campana { grid-template-columns: minmax(0, 1fr); }
+  .plan-admin { grid-template-columns: minmax(0, 1fr); }
+  .barra-plan { grid-template-columns: 6rem 1fr 2rem; }
+}

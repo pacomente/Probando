@@ -81,6 +81,7 @@ function limpiar(d) {
     colores: [color(d.colores?.[0], '#1c2030'), color(d.colores?.[1], '#ffb547')],
     motivo: MOTIVOS.includes(d.motivo) ? d.motivo : 'anillos',
     destacada: Boolean(d.destacada),
+    plus: Boolean(d.plus), // solo para suscriptores Plus
     estado: ['publicada', 'oculta', 'descargando', 'error'].includes(d.estado) ? d.estado : 'publicada',
     fuente: d.fuente ? texto(d.fuente, 2000) : null,
     alta: Number(d.alta) || Date.now(),

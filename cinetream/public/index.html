@@ -31,11 +31,15 @@
       <button class="icono-barra" data-nav data-ir="buscar" aria-label="Buscar">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5 L21 21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
       </button>
+      <span class="insignia-plus" id="insignia-plus" hidden>Plus</span>
       <button class="perfil-actual" data-nav data-ir="ajustes" aria-label="Perfil y ajustes"><span class="avatar avatar-actual"></span></button>
     </div>
   </header>
 
   <main>
+    <section id="vista-bienvenida" class="vista bienvenida" hidden></section>
+    <section id="vista-planes" class="vista pagina" hidden></section>
+
     <section id="vista-perfiles" class="vista perfiles" hidden>
       <span class="logo perfiles-logo"><span class="logo-marca">CINE</span><span class="logo-sub">TREAM</span></span>
       <h1>¿Quién está mirando?</h1>
@@ -87,6 +91,15 @@
         <div class="acciones">
           <button class="btn" data-nav id="ajustes-cambiar">Cambiar de perfil</button>
           <button class="btn" data-nav id="ajustes-editar">Editar este perfil</button>
+        </div>
+      </div>
+      <div class="ajustes-bloque" id="ajustes-cuenta" hidden>
+        <h2>Tu cuenta</h2>
+        <div class="cuenta-resumen" id="cuenta-resumen"></div>
+        <div class="acciones">
+          <button class="btn principal" data-nav id="cuenta-planes">Cambiar de plan</button>
+          <button class="btn" data-nav id="cuenta-cancelar" hidden>Cancelar la renovación</button>
+          <button class="btn" data-nav id="cuenta-salir">Cerrar sesión</button>
         </div>
       </div>
       <h2>Reproducción</h2>

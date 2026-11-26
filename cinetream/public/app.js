@@ -4,6 +4,8 @@ import { estudio, FILAS, IMPRESCINDIBLES, PELICULAS as PELICULAS_EJEMPLO } from 
 import { afiche, avatar, fondoApaisado, miniatura } from './carteles.js';
 import { accionDeTecla, enfocar, moverFoco, navegables } from './navegacion.js';
 import { abrirReproductor } from './reproductor.js';
+import { crearCuenta } from './cuenta.js';
+import { crearPublicidad } from './anuncios.js';
 
 const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -18,6 +20,26 @@ try {
   if (r.ok) { PELICULAS = (await r.json()).peliculas; conServidor = true; }
 } catch { /* sin servidor: catálogo de ejemplo */ }
 const porId = new Map(PELICULAS.map((p) => [p.id, p]));
+
+// ---------- Cuenta y publicidad ----------
+// Al ingresar, salir o cambiar de plan se recarga la plataforma: el catálogo y la publicidad dependen del plan
+const cuentas = crearCuenta({
+  conServidor,
+  alCambiar(mensaje) {
+    try { if (mensaje) sessionStorage.setItem('cinetream-aviso', mensaje); } catch { /* sin almacenamiento */ }
+    location.reload();
+  },
+});
+await cuentas.cargar().catch(() => null);
+const mensajePago = await cuentas.verificarRetorno().catch(() => null);
+const cuenta = () => cuentas.actual;
+const publicidad = crearPublicidad({ conServidor });
+await publicidad.cargar(Boolean(cuenta()?.anuncios));
+// Un título Plus se ve solo con un plan Plus
+const bloqueada = (p) => Boolean(p.plus && !cuenta()?.plus);
+// Sin publicidad en perfiles infantiles
+const conPublicidad = () => Boolean(cuenta()?.anuncios && !perfil?.ninos);
+let ultimoPrevio = 0;
 const sinTildes = (t) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const modoTV = () => !matchMedia('(pointer: coarse)').matches && innerWidth >= 1000;
 
@@ -68,8 +90,8 @@ const quedanTexto = (seg) => (seg >= 60 ? `Quedan ${Math.round(seg / 60)} min` :
 const formatoMin = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 // ---------- Navegación entre pantallas ----------
-const VISTAS = ['perfiles', 'editar', 'inicio', 'explorar', 'genero', 'ficha', 'buscar', 'lista', 'ajustes'];
-const SIN_BARRA = ['perfiles', 'editar'];
+const VISTAS = ['bienvenida', 'perfiles', 'editar', 'inicio', 'explorar', 'genero', 'ficha', 'buscar', 'lista', 'ajustes', 'planes'];
+const SIN_BARRA = ['bienvenida', 'perfiles', 'editar'];
 let pila = [];
 
 function mostrar(nombre, parametro, { apilar = true } = {}) {
@@ -84,7 +106,9 @@ function mostrar(nombre, parametro, { apilar = true } = {}) {
   document.querySelectorAll('[data-ir]').forEach((b) => b.classList.toggle('activo', b.dataset.ir === seccion));
   window.scrollTo(0, 0);
   ({ perfiles: pintarPerfiles, editar: pintarEditar, inicio: pintarInicio, explorar: pintarExplorar, genero: pintarGenero,
-    ficha: pintarFicha, buscar: pintarBuscar, lista: pintarLista, ajustes: pintarAjustes })[nombre](parametro);
+    ficha: pintarFicha, buscar: pintarBuscar, lista: pintarLista, ajustes: pintarAjustes,
+    bienvenida: () => cuentas.pintarBienvenida($('#vista-bienvenida'), { modoTV: modoTV() }),
+    planes: () => cuentas.pintarPlanes($('#vista-planes')) })[nombre](parametro);
 }
 
 function volver() {
@@ -115,7 +139,7 @@ function tarjeta(p) {
   const prog = progresoDe(p.id);
   return `<button class="tarjeta" data-nav data-id="${esc(p.id)}" aria-label="${esc(`${p.titulo}, ${p.anio}, ${duracion(p.duracionMin)}`)}">
     ${afiche(p, estudio(p))}
-    ${p.video ? '' : '<span class="sello">Próximamente</span>'}
+    ${p.plus ? '<span class="sello sello-plus">Plus</span>' : p.video || p.bloqueada ? '' : '<span class="sello">Próximamente</span>'}
     ${prog && enCurso(p.id) ? `<span class="progreso"><i style="width:${prog.pct}%"></i></span>` : ''}
   </button>`;
 }
@@ -309,6 +333,7 @@ function pintarInicio() {
     fila(`Seguir viendo como ${perfil.nombre}`, seguir.map(tarjetaSeguir).join(''), 'seguir', { clase: 'fila-ancha' }),
     filaDe('Mi lista', miLista, 'lista'),
     filaDe('Recién agregadas', recientes, 'recientes'),
+    conPublicidad() ? publicidad.banner() : '',
     fila(`Las ${top.length} imprescindibles`, top.map((p, i) => tarjetaTop(p, i + 1)).join(''), 'top', { clase: 'fila-top', subtitulo: 'Selección de Cinetream' }),
     ...FILAS.map((f, i) => filaDe(f.titulo, lista.filter(f.filtro), `f${i}`)),
   ].join('');
@@ -411,21 +436,25 @@ function pintarFicha(id) {
       ${datosDe(p)}
       ${enCurso(id) ? `<div class="barra-reanudar"><span class="progreso"><i style="width:${prog.pct}%"></i></span><span>${quedanTexto(prog.quedan)} · viste ${formatoMin(prog.t)}</span></div>` : ''}
       <div class="acciones">
-        <button class="btn principal" data-nav data-accion="ver">▶ ${enCurso(id) ? 'Seguir viendo' : 'Reproducir'}</button>
-        ${enCurso(id) ? '<button class="btn" data-nav data-accion="desde-cero">↺ Desde el principio</button>' : ''}
+        ${bloqueada(p)
+    ? '<button class="btn principal" data-nav data-accion="plus">★ Ver con Plus</button>'
+    : `<button class="btn principal" data-nav data-accion="ver">▶ ${enCurso(id) ? 'Seguir viendo' : 'Reproducir'}</button>
+        ${enCurso(id) ? '<button class="btn" data-nav data-accion="desde-cero">↺ Desde el principio</button>' : ''}`}
         <button class="btn" data-nav data-accion="lista" aria-pressed="${enLista}">${enLista ? '✓ En mi lista' : '＋ Mi lista'}</button>
       </div>
+      ${bloqueada(p) ? '<p class="aviso-plus">Este título es parte de <b>Cinetream Plus</b>: sin publicidad y con títulos exclusivos.</p>' : ''}
       <p class="sinopsis">${esc(p.sinopsis)}</p>
       <dl>
         ${[['Dirección', p.direccion], ['Origen', p.origen], ['Géneros', p.generos.join(', ')], ['Licencia', p.licencia]]
     .filter(([, v]) => v).map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}
-        ${p.video ? '' : '<dt>Archivo</dt><dd>Próximamente. Mientras tanto se reproduce una señal de prueba.</dd>'}
+        ${p.video || bloqueada(p) ? '' : '<dt>Archivo</dt><dd>Próximamente. Mientras tanto se reproduce una señal de prueba.</dd>'}
       </dl>
     </div>
     ${filaDe('Más como esta', parecidas, 'parecidas')}`;
   const accion = (a) => $(`#vista-ficha [data-accion="${a}"]`);
-  accion('ver').addEventListener('click', () => reproducir(id));
+  accion('ver')?.addEventListener('click', () => reproducir(id));
   accion('desde-cero')?.addEventListener('click', () => reproducir(id, 0));
+  accion('plus')?.addEventListener('click', () => mostrar('planes'));
   accion('lista').addEventListener('click', () => {
     datos.lista = datos.lista.includes(id) ? datos.lista.filter((x) => x !== id) : [id, ...datos.lista];
     guardarDatos();
@@ -435,7 +464,7 @@ function pintarFicha(id) {
     b.setAttribute('aria-pressed', String(ahora));
     avisar(ahora ? `«${p.titulo}» se agregó a Mi lista` : `«${p.titulo}» se quitó de Mi lista`);
   });
-  enfocar(accion('ver'), { inicial: true });
+  enfocar(accion('ver') || accion('plus'), { inicial: true });
 }
 
 // Aviso breve abajo de la pantalla
@@ -518,8 +547,32 @@ function pintarAjustes() {
   interruptor('#ajuste-animaciones', ajustes.animaciones);
   $('#ajuste-historial').textContent = 'Borrar el historial de este perfil';
   $('#ajustes-admin').hidden = !conServidor;
+  const c = cuenta();
+  $('#ajustes-cuenta').hidden = !c;
+  if (c) {
+    const fecha = c.vence ? new Date(c.vence).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+    $('#cuenta-resumen').innerHTML = `<b>${esc(c.planNombre)}</b>${c.plus ? '<span class="sello-plus en-linea">Plus</span>' : ''}<small>${esc(c.email)}${c.demo ? ' · demostración' : ''}</small>
+      <small>${c.vence ? (c.estado === 'cancelada' ? `No se renueva. Tenés ${esc(c.planNombre)} hasta el ${fecha}.` : `Se renueva el ${fecha}.`) : 'Con publicidad. Pasate a Plus para ver sin cortes.'}</small>`;
+    $('#cuenta-cancelar').hidden = !(c.plus && c.estado === 'activa');
+    $('#cuenta-cancelar').textContent = 'Cancelar la renovación';
+    $('#cuenta-planes').textContent = c.plus ? 'Cambiar de plan' : '★ Pasate a Plus';
+  }
   enfocar($('#ajustes-cambiar'), { inicial: true });
 }
+$('#cuenta-planes').addEventListener('click', () => mostrar('planes'));
+$('#cuenta-salir').addEventListener('click', () => cuentas.salir());
+let confirmarCancelar = null;
+$('#cuenta-cancelar').addEventListener('click', async (e) => {
+  const b = e.currentTarget;
+  if (!confirmarCancelar) {
+    b.textContent = '¿Cancelar la renovación? Tocá de nuevo';
+    confirmarCancelar = setTimeout(() => { confirmarCancelar = null; b.textContent = 'Cancelar la renovación'; }, 4000);
+    return;
+  }
+  clearTimeout(confirmarCancelar);
+  confirmarCancelar = null;
+  try { await cuentas.cancelar(); } catch (err) { avisar(err.message); }
+});
 $('#ajustes-cambiar').addEventListener('click', () => { administrando = false; mostrar('perfiles'); });
 $('#ajustes-editar').addEventListener('click', () => mostrar('editar', perfil.id));
 $('#ajuste-siguiente').addEventListener('click', () => {
@@ -559,8 +612,9 @@ function siguienteDe(p) {
 }
 
 let quitarEntradaHistorial = () => {};
-function reproducir(id, desde) {
+async function reproducir(id, desde) {
   const p = porId.get(id);
+  if (bloqueada(p)) { mostrar('planes'); avisar(`«${p.titulo}» es parte de Cinetream Plus`); return; }
   const prog = progresoDe(id);
   const inicio = desde ?? (enCurso(id) ? prog.t : 0);
   const contenedor = $('#vista-reproductor');
@@ -568,6 +622,23 @@ function reproducir(id, desde) {
   contenedor.hidden = false;
   document.body.style.overflow = 'hidden';
   try { history.pushState({ cinetream: 'reproductor' }, ''); } catch { /* sin historial */ }
+
+  // Plan Gratis: un anuncio antes de la película (como mucho uno cada 15 minutos)
+  if (conPublicidad() && Date.now() - ultimoPrevio > 15 * 60000) {
+    let porAtras = false;
+    const atrasEnAnuncio = () => { porAtras = true; document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); };
+    window.addEventListener('popstate', atrasEnAnuncio);
+    const resultado = await publicidad.previo(contenedor);
+    window.removeEventListener('popstate', atrasEnAnuncio);
+    if (resultado !== 'sin-anuncio') ultimoPrevio = Date.now();
+    if (resultado === 'cancelado') {
+      contenedor.hidden = true;
+      document.body.style.overflow = '';
+      if (!porAtras) { ignorarAtras++; try { history.back(); } catch { ignorarAtras--; } }
+      if (anterior?.isConnected) enfocar(anterior, { inicial: true });
+      return;
+    }
+  }
   let siguientePedida = null;
   const rep = abrirReproductor(contenedor, p, {
     desde: inicio,
@@ -649,12 +720,19 @@ if (vioIntro || !ajustes.animaciones || matchMedia('(prefers-reduced-motion: red
 // ---------- Arranque ----------
 let guardado = null;
 try { guardado = sessionStorage.getItem('cinetream-perfil'); } catch { /* sin almacenamiento */ }
-if (guardado && perfiles.some((p) => p.id === guardado)) {
+$('#insignia-plus').hidden = !cuenta()?.plus;
+if (!cuenta()) {
+  mostrar('bienvenida'); // sin cuenta: bienvenida con los planes
+} else if (guardado && perfiles.some((p) => p.id === guardado)) {
   elegirPerfil(guardado);
   mostrar('inicio');
 } else {
   mostrar('perfiles');
 }
+// Avisos pendientes: el resultado de un pago o de un cambio de plan
+let avisoPendiente = mensajePago;
+try { avisoPendiente ||= sessionStorage.getItem('cinetream-aviso'); sessionStorage.removeItem('cinetream-aviso'); } catch { /* sin almacenamiento */ }
+if (avisoPendiente) setTimeout(() => avisar(avisoPendiente), 1200);
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});

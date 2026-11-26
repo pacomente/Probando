@@ -52,7 +52,7 @@ export const PELICULAS = [
     video: null, colores: ['#1f3b2f', '#e8a3b8'], motivo: 'ondas',
   },
   {
-    id: 'cosmos-laundromat', titulo: 'Cosmos Laundromat', anio: 2015, duracionMin: 12, clasificacion: '+13',
+    id: 'cosmos-laundromat', titulo: 'Cosmos Laundromat', anio: 2015, duracionMin: 12, clasificacion: '+13', plus: true,
     generos: ['Animación', 'Comedia', 'Fantasía'], direccion: 'Mathieu Auvray', origen: 'Países Bajos',
     licencia: 'CC BY 4.0 · Blender Foundation',
     sinopsis: 'En una isla desolada, Franck, una oveja harta de todo, conoce a Victor, un vendedor excéntrico que le ofrece el regalo de mil vidas.',
@@ -80,7 +80,7 @@ export const PELICULAS = [
     video: null, colores: ['#141414', '#9a9a8a'], motivo: 'sombra', destacada: true,
   },
   {
-    id: 'caligari', titulo: 'El gabinete del Dr. Caligari', anio: 1920, duracionMin: 76, clasificacion: '+13',
+    id: 'caligari', titulo: 'El gabinete del Dr. Caligari', anio: 1920, duracionMin: 76, clasificacion: '+13', plus: true,
     generos: ['Clásicos', 'Terror', 'Cine mudo'], direccion: 'Robert Wiene', origen: 'Alemania',
     licencia: 'Dominio público',
     sinopsis: 'Un hipnotizador de feria y su sonámbulo llegan a un pueblo donde empiezan a ocurrir asesinatos. La obra cumbre del expresionismo alemán.',

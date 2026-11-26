@@ -9,6 +9,9 @@ import {
   claveCorrecta, definirClave, quitarPelicula, todas,
 } from './datos.js';
 import { analizar, descargar, ErrorImportar } from './importar.js';
+import { activarPlan, buscarCuenta, guardarCuentas, guardarPlanes, listaPlanes, planEfectivo, todasLasCuentas } from './cuentas.js';
+import { actualizarCampana, buscarCampana, campanas, CARPETA_PIEZAS, crearCampana, ponerPieza, quitarCampana } from './publicidad.js';
+import { modoPrueba } from './pagos.js';
 
 const HORAS_SESION = 12;
 const sesiones = new Map(); // id → vence
@@ -218,6 +221,97 @@ export async function rutasAdmin(req, res, url) {
         await once(destino, 'finish');
         await borrarArchivoPropio(p.portada);
         return json(res, 200, { pelicula: actualizarPelicula(p.id, { portada: `portadas/${archivo}` }) });
+      }
+    }
+    // ---------- Resumen del negocio ----------
+    if (ruta === '/resumen') {
+      const cuentas = todasLasCuentas();
+      const porPlan = {};
+      let mensual = 0;
+      for (const c of cuentas) {
+        const plan = planEfectivo(c);
+        porPlan[plan.id] = (porPlan[plan.id] || 0) + 1;
+        if (plan.precio) mensual += plan.periodo === 'año' ? plan.precio / 12 : plan.precio;
+      }
+      const stats = campanas().reduce((t, c) => ({ impresiones: t.impresiones + c.stats.impresiones, clics: t.clics + c.stats.clics, completos: t.completos + c.stats.completos }), { impresiones: 0, clics: 0, completos: 0 });
+      const hace30 = Date.now() - 30 * 86400000;
+      return json(res, 200, {
+        cuentas: cuentas.length, nuevas30: cuentas.filter((c) => c.alta > hace30).length, porPlan,
+        ingresoMensual: Math.round(mensual), publicidad: stats, campanasActivas: campanas().filter((c) => c.activa).length,
+        planes: listaPlanes(), modoPrueba: modoPrueba(),
+      });
+    }
+
+    // ---------- Suscriptores ----------
+    if (ruta === '/cuentas') {
+      return json(res, 200, {
+        cuentas: todasLasCuentas().map((c) => ({
+          id: c.id, email: c.email, nombre: c.nombre, alta: c.alta, plan: c.plan, estado: c.estado, vence: c.vence,
+          planEfectivo: planEfectivo(c).id, pago: c.pago ? { proveedor: c.pago.proveedor, estado: c.pago.estado } : null,
+        })),
+      });
+    }
+    const mc = ruta.match(/^\/cuentas\/([a-f0-9]+)$/);
+    if (mc && req.method === 'PUT') {
+      // Cambio manual (por ejemplo, un pago por transferencia o una cortesía)
+      const cuenta = buscarCuenta(mc[1]);
+      if (!cuenta) return json(res, 404, { error: 'Esa cuenta no existe.' });
+      const { plan, dias } = await leerJSON(req);
+      activarPlan(cuenta, plan, { vence: plan === 'gratis' ? null : Date.now() + Math.min(Math.max(Number(dias) || 30, 1), 3660) * 86400000, pago: { proveedor: 'manual', estado: 'autorizada' } });
+      guardarCuentas();
+      return json(res, 200, { ok: true });
+    }
+
+    // ---------- Planes y precios ----------
+    if (ruta === '/planes' && req.method === 'PUT') {
+      const { planes } = await leerJSON(req);
+      return json(res, 200, { planes: await guardarPlanes(Array.isArray(planes) ? planes : []) });
+    }
+
+    // ---------- Publicidad ----------
+    if (ruta === '/publicidad' && req.method === 'GET') return json(res, 200, { campanas: campanas() });
+    if (ruta === '/publicidad' && req.method === 'POST') return json(res, 200, { campana: crearCampana((await leerJSON(req)).datos || {}) });
+    const mp = ruta.match(/^\/publicidad\/([a-z0-9-]+)(\/pieza)?$/);
+    if (mp) {
+      const c = buscarCampana(mp[1]);
+      if (!c) return json(res, 404, { error: 'Esa campaña no existe.' });
+      if (!mp[2] && req.method === 'PUT') return json(res, 200, { campana: actualizarCampana(c.id, (await leerJSON(req)).datos || {}) });
+      if (!mp[2] && req.method === 'DELETE') {
+        quitarCampana(c.id);
+        if (c.pieza) await rm(path.join(CARPETA_PIEZAS, path.basename(c.pieza)), { force: true });
+        return json(res, 200, { ok: true });
+      }
+      if (mp[2] && req.method === 'DELETE') {
+        const { anterior } = ponerPieza(c.id, null, null);
+        if (anterior) await rm(path.join(CARPETA_PIEZAS, path.basename(anterior)), { force: true });
+        return json(res, 200, { campana: buscarCampana(c.id) });
+      }
+      if (mp[2] && req.method === 'PUT') {
+        // La pieza (imagen o video) llega entera en el cuerpo
+        const tipo = (req.headers['content-type'] || '').split(';')[0];
+        const ext = EXT_IMAGEN[tipo] || EXT_VIDEO[tipo];
+        if (!ext) return json(res, 415, { error: 'La pieza tiene que ser una imagen (JPG, PNG, WebP) o un video (MP4, WebM).' });
+        const archivo = nombreArchivo(c.id, ext);
+        const parcial = path.join(CARPETA_PIEZAS, `${archivo}.parcial`);
+        const salida = createWriteStream(parcial);
+        let total = 0;
+        try {
+          for await (const parte of req) {
+            total += parte.length;
+            if (total > 200 * 1024 ** 2) throw new Error('La pieza es demasiado grande (máximo 200 MB).');
+            if (!salida.write(parte)) await once(salida, 'drain');
+          }
+          salida.end();
+          await once(salida, 'finish');
+          await rename(parcial, path.join(CARPETA_PIEZAS, archivo));
+        } catch (e) {
+          salida.destroy();
+          await rm(parcial, { force: true });
+          return json(res, 400, { error: e.message });
+        }
+        const { campana, anterior } = ponerPieza(c.id, `anuncios/${archivo}`, EXT_IMAGEN[tipo] ? 'imagen' : 'video');
+        if (anterior) await rm(path.join(CARPETA_PIEZAS, path.basename(anterior)), { force: true });
+        return json(res, 200, { campana });
       }
     }
     return json(res, 404, { error: 'No existe.' });
