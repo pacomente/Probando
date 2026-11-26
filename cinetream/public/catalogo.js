@@ -100,7 +100,11 @@ export const IMPRESCINDIBLES = ['sintel', 'nosferatu', 'big-buck-bunny', 'viaje-
   'caminandes-llamigos', 'caligari', 'cosmos-laundromat', 'spring', 'elephants-dream'];
 
 // Quién firma cada película en el afiche y la ficha
-export const estudio = (p) => (p.licencia.startsWith('Dominio') ? 'Clásico del cine' : 'Blender Studio');
+export const estudio = (p) => {
+  if (/dominio p[uú]blico/i.test(p.licencia || '')) return 'Clásico del cine';
+  if (/blender/i.test(p.licencia || '')) return 'Blender Studio';
+  return 'Cinetream';
+};
 
 // Filas de la pantalla de inicio, en orden
 export const FILAS = [

@@ -1,3 +1,4 @@
 videos/*
 !videos/LEEME.txt
+datos/
 node_modules/

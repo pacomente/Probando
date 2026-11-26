@@ -159,7 +159,7 @@ main { padding-bottom: 3rem; }
 .portada-fondo svg, .ficha-fondo svg { width: 100%; height: 100%; animation: acercar 22s ease-out both; }
 @keyframes acercar { from { transform: scale(1.08); } to { transform: scale(1); } }
 .portada::before, .ficha-fondo::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--grano); opacity: 0.09; mix-blend-mode: overlay; pointer-events: none; }
-.portada::after, .ficha-fondo::after { content: ""; position: absolute; inset: auto 0 0; height: 45%; z-index: -1; background: linear-gradient(transparent, var(--fondo)); }
+.portada::after, .ficha-fondo::after { content: ""; position: absolute; inset: auto 0 0; height: 45%; z-index: 0; /* encima de la foto, para fundirla con el fondo */ background: linear-gradient(transparent, var(--fondo)); }
 .portada-texto {
   position: absolute;
   left: var(--margen);
@@ -563,4 +563,17 @@ main { padding-bottom: 3rem; }
 body.sin-animaciones *, body.sin-animaciones *::before, body.sin-animaciones *::after { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* ---------- Portadas con foto (subidas por el administrador) ---------- */
+.foto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.afiche.con-foto::after { inset: 35% 0 0; }
+.foto-fondo { left: 30%; width: 70%; animation: acercar 22s ease-out both; }
+.foto-velo { position: absolute; inset: 0; background: linear-gradient(90deg, var(--tono) 28%, color-mix(in srgb, var(--tono) 70%, transparent) 42%, transparent 75%), linear-gradient(transparent 55%, #0b0c11cc); }
+.ficha-fondo .foto-fondo, .portada-fondo .foto-fondo { opacity: 0.9; }
+.ajustes-bloque { display: grid; gap: 0.6rem; justify-items: start; }
+a.btn { color: inherit; text-decoration: none; }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) {
+  .foto-fondo { left: 0; width: 100%; opacity: 0.55 !important; }
+  .foto-velo { background: linear-gradient(transparent 20%, #0b0c11 92%); }
 }

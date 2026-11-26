@@ -64,21 +64,26 @@ function mezclar(a, b, t) {
   return `#${x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('')}`;
 }
 
+// Portada descargada (archive.org, página o subida por el administrador), en lugar de la ilustración
+const imagen = (p, clase = '') => `<img class="foto ${clase}" src="${esc(p.portada)}" alt="" loading="lazy" decoding="async">`;
+
 // Afiche vertical: estudio arriba, título con tipografía de cartel y año
 export function afiche(p, firma = '') {
-  return `<div class="afiche">${svg(p, 200, 300)}
+  return `<div class="afiche${p.portada ? ' con-foto' : ''}">${p.portada ? imagen(p) : svg(p, 200, 300)}
     ${firma ? `<span class="afiche-firma">${esc(firma)}</span>` : ''}
     <span class="afiche-titulo">${esc(p.titulo)}</span><span class="afiche-anio">${p.anio}</span></div>`;
 }
 
 // Miniatura apaisada (16:9) para "Seguir viendo"
 export function miniatura(p) {
-  return `<div class="miniatura">${svg(p, 1600, 900, 'ancho')}<span class="miniatura-titulo">${esc(p.titulo)}</span></div>`;
+  return `<div class="miniatura${p.portada ? ' con-foto' : ''}">${p.portada ? imagen(p) : svg(p, 1600, 900, 'ancho')}<span class="miniatura-titulo">${esc(p.titulo)}</span></div>`;
 }
 
 // Fondo apaisado para la portada y la ficha
 export function fondoApaisado(p) {
-  return svg(p, 1600, 900, 'ancho');
+  if (!p.portada) return svg(p, 1600, 900, 'ancho');
+  // La foto ocupa la derecha y se funde hacia la izquierda, donde va el texto
+  return `${imagen(p, 'foto-fondo')}<div class="foto-velo" style="--tono:${p.colores?.[0] || '#0b0c11'}"></div>`;
 }
 
 // Avatar de perfil: una cara simple sobre el color elegido (la forma de los ojos cambia con el estilo)

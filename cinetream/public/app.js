@@ -1,12 +1,22 @@
 // Cinetream: pantallas, perfiles, "Seguir viendo", Mi lista, Explorar, búsqueda y ajustes.
 // Funciona igual con control remoto (tele), teclado, mouse o el dedo (celular).
-import { estudio, FILAS, IMPRESCINDIBLES, PELICULAS } from './catalogo.js';
+import { estudio, FILAS, IMPRESCINDIBLES, PELICULAS as PELICULAS_EJEMPLO } from './catalogo.js';
 import { afiche, avatar, fondoApaisado, miniatura } from './carteles.js';
 import { accionDeTecla, enfocar, moverFoco, navegables } from './navegacion.js';
 import { abrirReproductor } from './reproductor.js';
 
 const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+// El catálogo lo arma el administrador en el servidor; sin servidor (demo), se usa el de ejemplo
+let PELICULAS = PELICULAS_EJEMPLO;
+let conServidor = false;
+try {
+  const control = new AbortController();
+  const corte = setTimeout(() => control.abort(), 5000);
+  const r = await fetch('api/catalogo', { cache: 'no-cache', signal: control.signal });
+  clearTimeout(corte);
+  if (r.ok) { PELICULAS = (await r.json()).peliculas; conServidor = true; }
+} catch { /* sin servidor: catálogo de ejemplo */ }
 const porId = new Map(PELICULAS.map((p) => [p.id, p]));
 const sinTildes = (t) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const modoTV = () => !matchMedia('(pointer: coarse)').matches && innerWidth >= 1000;
@@ -293,9 +303,12 @@ function pintarInicio() {
     .map(([id]) => porId.get(id));
   const miLista = datos.lista.map((id) => porId.get(id)).filter((p) => p && lista.includes(p));
   const top = IMPRESCINDIBLES.map((id) => porId.get(id)).filter((p) => p && lista.includes(p));
+  // Lo último que subió el administrador
+  const recientes = conServidor ? [...lista].filter((p) => p.alta).sort((a, b) => b.alta - a.alta).slice(0, 12) : [];
   $('#filas').innerHTML = [
     fila(`Seguir viendo como ${perfil.nombre}`, seguir.map(tarjetaSeguir).join(''), 'seguir', { clase: 'fila-ancha' }),
     filaDe('Mi lista', miLista, 'lista'),
+    filaDe('Recién agregadas', recientes, 'recientes'),
     fila(`Las ${top.length} imprescindibles`, top.map((p, i) => tarjetaTop(p, i + 1)).join(''), 'top', { clase: 'fila-top', subtitulo: 'Selección de Cinetream' }),
     ...FILAS.map((f, i) => filaDe(f.titulo, lista.filter(f.filtro), `f${i}`)),
   ].join('');
@@ -404,10 +417,8 @@ function pintarFicha(id) {
       </div>
       <p class="sinopsis">${esc(p.sinopsis)}</p>
       <dl>
-        <dt>Dirección</dt><dd>${esc(p.direccion)}</dd>
-        <dt>Origen</dt><dd>${esc(p.origen)}</dd>
-        <dt>Géneros</dt><dd>${esc(p.generos.join(', '))}</dd>
-        <dt>Licencia</dt><dd>${esc(p.licencia)}</dd>
+        ${[['Dirección', p.direccion], ['Origen', p.origen], ['Géneros', p.generos.join(', ')], ['Licencia', p.licencia]]
+    .filter(([, v]) => v).map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}
         ${p.video ? '' : '<dt>Archivo</dt><dd>Próximamente. Mientras tanto se reproduce una señal de prueba.</dd>'}
       </dl>
     </div>
@@ -506,6 +517,7 @@ function pintarAjustes() {
   interruptor('#ajuste-siguiente', ajustes.autoSiguiente);
   interruptor('#ajuste-animaciones', ajustes.animaciones);
   $('#ajuste-historial').textContent = 'Borrar el historial de este perfil';
+  $('#ajustes-admin').hidden = !conServidor;
   enfocar($('#ajustes-cambiar'), { inicial: true });
 }
 $('#ajustes-cambiar').addEventListener('click', () => { administrando = false; mostrar('perfiles'); });

@@ -1,6 +1,6 @@
 // Guarda la plataforma en el dispositivo: se abre al instante y el catálogo se ve aunque se corte internet.
 // Los videos no se guardan (son pesados): necesitan conexión.
-const VERSION = 'cinetream-v2';
+const VERSION = 'cinetream-v3';
 const APP = ['./', 'index.html', 'estilos.css', 'app.js', 'catalogo.js', 'carteles.js', 'navegacion.js', 'reproductor.js',
   'manifest.webmanifest', 'icono.svg', 'icono-192.png', 'icono-512.png'];
 
@@ -12,6 +12,7 @@ self.addEventListener('activate', (e) => e.waitUntil(caches.keys()
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin || url.pathname.includes('/videos/')) return;
+  if (url.pathname.includes('/api/admin') || url.pathname.endsWith('admin.html') || url.pathname.endsWith('admin.js')) return;
   e.respondWith(fetch(e.request)
     .then((r) => {
       if (r.ok) { const copia = r.clone(); caches.open(VERSION).then((c) => c.put(e.request, copia)); }

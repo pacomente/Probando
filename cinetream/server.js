@@ -1,5 +1,6 @@
-// Servidor de Cinetream: sirve la plataforma y los videos de la carpeta videos/.
+// Servidor de Cinetream: sirve la plataforma, el catálogo, las portadas y los videos de la carpeta videos/.
 // Los videos se sirven por partes (HTTP Range), así se puede adelantar sin descargar el archivo entero.
+// El administrador (/admin.html) solo se abre desde esta misma PC, salvo que se configure ADMIN_DESDE_RED=1.
 // Sin dependencias: solo módulos nativos de Node.
 import http from 'node:http';
 import { createReadStream } from 'node:fs';
@@ -7,13 +8,17 @@ import { readFile, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CARPETA_PORTADAS, CARPETA_VIDEOS, publicadas } from './datos.js';
+import { rutasAdmin } from './admin.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3500;
 // 0.0.0.0: también la pueden abrir la tele y el celular conectados a la misma red wifi
 const HOST = process.env.HOST || '0.0.0.0';
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const VIDEOS_DIR = path.join(__dirname, 'videos');
+const VIDEOS_DIR = CARPETA_VIDEOS;
+const ADMIN_DESDE_RED = process.env.ADMIN_DESDE_RED === '1';
+const esLocal = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
 
 const TIPOS = {
   '.html': 'text/html; charset=utf-8',
@@ -21,6 +26,8 @@ const TIPOS = {
   '.js': 'text/javascript; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.webp': 'image/webp',
   '.webmanifest': 'application/manifest+json',
   '.mp4': 'video/mp4',
   '.webm': 'video/webm',
@@ -63,6 +70,26 @@ async function servirVideo(req, res, archivo) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   try {
+    // Catálogo público: solo las películas publicadas
+    if (url.pathname === '/api/catalogo') {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-cache', ...SEGURIDAD });
+      return res.end(JSON.stringify({ peliculas: publicadas().map(({ fuente, estado, ...p }) => p) }));
+    }
+    // Administrador
+    if (url.pathname.startsWith('/api/admin/') || url.pathname === '/admin.html') {
+      if (!ADMIN_DESDE_RED && !esLocal(req)) {
+        res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8', ...SEGURIDAD });
+        return res.end('El administrador de Cinetream solo se abre desde la PC donde está instalado.');
+      }
+      if (url.pathname !== '/admin.html') return await rutasAdmin(req, res, url);
+    }
+    if (url.pathname.startsWith('/portadas/')) {
+      const archivo = dentroDe(CARPETA_PORTADAS, url.pathname.slice('/portadas/'.length));
+      if (!archivo) { res.writeHead(403, SEGURIDAD); return res.end(); }
+      const contenido = await readFile(archivo);
+      res.writeHead(200, { 'Content-Type': TIPOS[path.extname(archivo).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'public, max-age=86400', ...SEGURIDAD });
+      return res.end(contenido);
+    }
     if (url.pathname.startsWith('/videos/')) {
       const archivo = dentroDe(VIDEOS_DIR, url.pathname.slice('/videos/'.length));
       if (!archivo) { res.writeHead(403, SEGURIDAD); return res.end(); }
@@ -81,6 +108,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`🎬 Cinetream → http://localhost:${PORT}`);
+  console.log(`   Administrador (desde esta PC) → http://localhost:${PORT}/admin.html`);
   // Direcciones para abrirla desde la tele o el celular en la misma red
   for (const lista of Object.values(os.networkInterfaces())) {
     for (const red of lista || []) {
