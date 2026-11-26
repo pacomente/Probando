@@ -85,6 +85,7 @@ function limpiar(d) {
     estado: ['publicada', 'oculta', 'descargando', 'error'].includes(d.estado) ? d.estado : 'publicada',
     fuente: d.fuente ? texto(d.fuente, 2000) : null,
     videoOriginal: d.videoOriginal ? texto(d.videoOriginal, 2000) : null, // link del que se bajó el video guardado
+    tamano: Math.max(0, Math.round(Number(d.tamano) || 0)), // bytes del video en Cloudflare R2
     alta: Number(d.alta) || Date.now(),
   };
 }

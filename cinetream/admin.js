@@ -1,6 +1,7 @@
 // Administrador de Cinetream: sesión con contraseña, importar por link, subir archivos y editar el catálogo.
 import crypto from 'node:crypto';
-import { createWriteStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { Readable } from 'node:stream';
 import { readdir, rename, rm, stat, statfs } from 'node:fs/promises';
 import { once } from 'node:events';
 import path from 'node:path';
@@ -13,6 +14,9 @@ import { activarPlan, buscarCuenta, guardarCuentas, guardarPlanes, listaPlanes, 
 import { actualizarCampana, buscarCampana, campanas, CARPETA_PIEZAS, crearCampana, ponerPieza, quitarCampana } from './publicidad.js';
 import { modoPrueba } from './pagos.js';
 import { direccionPublica, enInternet, esLocal, ipCliente } from './red.js';
+import {
+  borrarObjeto, espacioUsado, ErrorR2, linkSubida, permitirSubidasDesde, probarConexion, r2Bucket, r2Configurado, subirFlujo,
+} from './r2.js';
 import { estadoEnlace, guardarEnlace, olvidarPelicula, revisarEnlace, vistas, vistasPorDia } from './estadisticas.js';
 
 const HORAS_SESION = 12;
@@ -35,7 +39,7 @@ function leerJSON(req, limite = 200_000) {
   });
 }
 const cookie = (req, valor, segundos) => `cinetream_admin=${valor}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${segundos}${req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : ''}`;
-function sesionValida(req) {
+export function sesionValida(req) {
   const id = (req.headers.cookie || '').match(/cinetream_admin=([^;]+)/)?.[1];
   const vence = id && sesiones.get(id);
   return Boolean(vence && vence > Date.now());
@@ -79,6 +83,61 @@ async function disco() {
 }
 
 const esExterno = (v) => /^https?:\/\//i.test(v || '');
+const enR2 = (v) => /^r2:/.test(v || '');
+const TIPOS_VIDEO = { '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime', '.ogv': 'video/ogg' };
+
+// Cuánto ocupa el bucket de R2 (se consulta como mucho una vez por minuto)
+let espacioR2 = { fecha: 0, datos: null };
+async function datosR2() {
+  if (!r2Configurado()) return { configurado: false };
+  if (Date.now() - espacioR2.fecha > 60000) {
+    try { espacioR2 = { fecha: Date.now(), datos: await espacioUsado() }; } catch (e) { espacioR2 = { fecha: Date.now(), datos: { error: e.message } }; }
+  }
+  return { configurado: true, bucket: r2Bucket(), ...espacioR2.datos };
+}
+
+// La regla CORS del bucket se pone una sola vez por arranque (para subir directo desde el navegador)
+let corsListo = '';
+async function asegurarCors(req) {
+  const origen = req.headers.origin || direccionPublica(req) || `http://${req.headers.host}`;
+  if (corsListo === origen) return;
+  await permitirSubidasDesde(origen);
+  corsListo = origen;
+}
+
+// Pasa un video (de un link o del disco) a Cloudflare R2 sin sacarlo de la plataforma mientras sube
+async function pasarAR2(p) {
+  const trabajo = { estado: 'descargando', tipo: 'r2', bytes: 0, total: 0, error: null, control: new AbortController() };
+  trabajos.set(p.id, trabajo);
+  const anterior = p.video;
+  const ext = esExterno(anterior) ? extDe(anterior) : path.extname(anterior).toLowerCase() || '.mp4';
+  const clave = `videos/${nombreArchivo(p.id, ext)}`;
+  try {
+    let flujo;
+    let tipo = TIPOS_VIDEO[ext] || 'video/mp4';
+    if (esExterno(anterior)) {
+      const r = await fetch(anterior, { redirect: 'follow', signal: trabajo.control.signal, headers: { 'User-Agent': 'Cinetream/1.0' } });
+      if (!r.ok || !r.body) throw new ErrorImportar(`El link respondió ${r.status}.`);
+      if (/text\/html/i.test(r.headers.get('content-type') || '')) throw new ErrorImportar('El link ya no lleva a un video.');
+      tipo = (r.headers.get('content-type') || tipo).split(';')[0];
+      trabajo.total = Number(r.headers.get('content-length')) || 0;
+      flujo = Readable.fromWeb(r.body);
+    } else {
+      const archivo = path.join(CARPETA_VIDEOS, anterior.slice('videos/'.length));
+      trabajo.total = (await stat(archivo)).size;
+      flujo = createReadStream(archivo);
+    }
+    const tamano = await subirFlujo(clave, flujo, { tipo, senal: trabajo.control.signal, alProgreso: (n) => { trabajo.bytes = n; } });
+    actualizarPelicula(p.id, { video: `r2:${clave}`, tamano, videoOriginal: esExterno(anterior) ? anterior : buscarPelicula(p.id)?.videoOriginal });
+    if (anterior.startsWith('videos/')) await borrarArchivoPropio(anterior);
+    espacioR2.fecha = 0;
+    trabajo.estado = 'listo';
+  } catch (e) {
+    trabajo.estado = 'error';
+    trabajo.error = trabajo.control.signal.aborted ? 'Se canceló el pase a R2.'
+      : e instanceof ErrorImportar || e instanceof ErrorR2 ? e.message : 'No se pudo pasar el video a Cloudflare R2.';
+  }
+}
 
 // Pasar una película «desde link» a un archivo guardado en el servidor, sin sacarla de la plataforma mientras baja
 async function guardarEnServidor(p) {
@@ -123,7 +182,15 @@ async function importar(p, info, modo) {
         actualizarPelicula(p.id, { portada: `portadas/${final}` });
       } catch { /* sin portada: se usa la ilustración de Cinetream */ }
     }
-    if (modo === 'descargar') {
+    if (modo === 'r2') {
+      // Se sube directo del link a R2, sin pasar por el disco del servidor
+      actualizarPelicula(p.id, { video: info.video });
+      trabajos.delete(p.id);
+      await pasarAR2(buscarPelicula(p.id));
+      const t = trabajos.get(p.id);
+      if (t?.estado === 'error') throw new ErrorImportar(t.error);
+      trabajos.set(p.id, trabajo);
+    } else if (modo === 'descargar') {
       const archivo = nombreArchivo(p.id, extDe(info.video));
       await descargar(info.video, path.join(CARPETA_VIDEOS, archivo), {
         senal: trabajo.control.signal,
@@ -181,7 +248,7 @@ export async function rutasAdmin(req, res, url) {
       for (const p of todas()) {
         const local = p.video?.startsWith('videos/');
         extra[p.id] = {
-          bytes: local ? (await stat(path.join(CARPETA_VIDEOS, p.video.slice(7))).catch(() => ({ size: 0 }))).size : 0,
+          bytes: local ? (await stat(path.join(CARPETA_VIDEOS, p.video.slice(7))).catch(() => ({ size: 0 }))).size : enR2(p.video) ? p.tamano : 0,
           vistas: vistas(p.id),
           enlace: esExterno(p.video) ? estadoEnlace(p.id) : null,
         };
@@ -192,7 +259,28 @@ export async function rutasAdmin(req, res, url) {
         espacio: await espacioVideos(),
         extra,
         disco: await disco(),
+        r2: await datosR2(),
       });
+    }
+
+    // ---------- Cloudflare R2 ----------
+    if (ruta === '/r2') return json(res, 200, await datosR2());
+    if (ruta === '/r2/probar' && req.method === 'POST') {
+      if (!r2Configurado()) return json(res, 400, { error: 'Faltan las variables de R2 (R2_CUENTA, R2_CLAVE_ID, R2_CLAVE_SECRETA y R2_BUCKET).' });
+      await probarConexion();
+      let cors = true;
+      try { corsListo = ''; await asegurarCors(req); } catch { cors = false; }
+      espacioR2.fecha = 0;
+      return json(res, 200, { ok: true, cors, ...(await datosR2()) });
+    }
+    // El navegador sube el archivo directo a R2 con un link firmado: no pasa por el servidor
+    if (ruta === '/r2/subida' && req.method === 'POST') {
+      if (!r2Configurado()) return json(res, 400, { error: 'Cloudflare R2 no está configurado.' });
+      const { base, tipo } = await leerJSON(req);
+      if (!EXT_VIDEO[tipo]) return json(res, 415, { error: 'Ese archivo no es un video compatible (MP4, WebM o MOV).' });
+      try { await asegurarCors(req); } catch (e) { return json(res, 502, { error: `R2 no aceptó la regla para subir desde el navegador: ${e.message}` }); }
+      const clave = `videos/${nombreArchivo(String(base || 'pelicula'), EXT_VIDEO[tipo])}`;
+      return json(res, 200, { url: linkSubida(clave), video: `r2:${clave}` });
     }
 
     // Revisa que los videos «desde link» sigan funcionando (de a 4 por vez)
@@ -254,8 +342,9 @@ export async function rutasAdmin(req, res, url) {
       const { info, datos, modo, derechos } = await leerJSON(req);
       if (!derechos) return json(res, 400, { error: 'Confirmá que tenés derecho a publicar esta película.' });
       if (!info?.video) return json(res, 400, { error: 'Primero buscá el link.' });
-      const p = agregarPelicula({ ...datos, video: modo === 'descargar' ? null : info.video, fuente: info.fuente || info.video, estado: 'descargando' });
-      importar(p, { ...info, publicar: Boolean(datos?.publicar) }, modo === 'descargar' ? 'descargar' : 'link');
+      const p = agregarPelicula({ ...datos, video: modo === 'link' ? info.video : null, fuente: info.fuente || info.video, estado: 'descargando' });
+      if (modo === 'r2' && !r2Configurado()) return json(res, 400, { error: 'Cloudflare R2 no está configurado.' });
+      importar(p, { ...info, publicar: Boolean(datos?.publicar) }, ['descargar', 'r2'].includes(modo) ? modo : 'link');
       return json(res, 200, { pelicula: p });
     }
 
@@ -285,7 +374,7 @@ export async function rutasAdmin(req, res, url) {
       return json(res, 200, { pelicula: agregarPelicula(datos) });
     }
 
-    const m = ruta.match(/^\/peliculas\/([a-z0-9-]+)(\/portada|\/cancelar|\/guardar|\/liberar)?$/);
+    const m = ruta.match(/^\/peliculas\/([a-z0-9-]+)(\/portada|\/cancelar|\/guardar|\/liberar|\/r2)?$/);
     if (m) {
       const p = buscarPelicula(m[1]);
       if (!p) return json(res, 404, { error: 'Esa película no existe.' });
@@ -299,6 +388,7 @@ export async function rutasAdmin(req, res, url) {
         trabajos.delete(p.id);
         quitarPelicula(p.id);
         olvidarPelicula(p.id);
+        if (enR2(p.video)) await borrarObjeto(p.video.slice(3)).catch(() => {});
         await borrarArchivoPropio(p.video);
         await borrarArchivoPropio(p.portada);
         return json(res, 200, { ok: true });
@@ -311,16 +401,24 @@ export async function rutasAdmin(req, res, url) {
         guardarEnServidor(p);
         return json(res, 200, { ok: true });
       }
+      if (m[2] === '/r2' && req.method === 'POST') {
+        if (!r2Configurado()) return json(res, 400, { error: 'Cloudflare R2 no está configurado.' });
+        if (!esExterno(p.video) && !p.video?.startsWith('videos/')) return json(res, 400, { error: 'Esta película no tiene un video para pasar a R2.' });
+        if (trabajos.get(p.id)?.estado === 'descargando') return json(res, 409, { error: 'Ya hay una copia en curso.' });
+        pasarAR2(p);
+        return json(res, 200, { ok: true });
+      }
       if (m[2] === '/liberar' && req.method === 'POST') {
-        // Vuelve a reproducirse desde el link original y se borra el archivo del servidor
-        if (!p.video?.startsWith('videos/')) return json(res, 400, { error: 'Esta película no está guardada en el servidor.' });
+        // Vuelve a reproducirse desde el link original y se borra el archivo del servidor (o de R2)
+        if (!p.video?.startsWith('videos/') && !enR2(p.video)) return json(res, 400, { error: 'Esta película no está guardada.' });
         if (!esExterno(p.videoOriginal)) return json(res, 400, { error: 'No se conoce el link original de este video: no se puede liberar sin que deje de verse.' });
         const r = await revisarEnlace(p.videoOriginal);
         if (!r.ok) return json(res, 409, { error: `El link original ya no funciona (${r.detalle.toLowerCase()}). Si se libera, la película dejaría de verse.` });
         const archivo = p.video;
-        actualizarPelicula(p.id, { video: p.videoOriginal });
+        actualizarPelicula(p.id, { video: p.videoOriginal, tamano: 0 });
         guardarEnlace(p.id, r);
-        await borrarArchivoPropio(archivo);
+        if (enR2(archivo)) await borrarObjeto(archivo.slice(3));
+        else await borrarArchivoPropio(archivo);
         return json(res, 200, { pelicula: buscarPelicula(p.id) });
       }
       if (m[2] === '/cancelar' && req.method === 'POST') {
@@ -365,9 +463,11 @@ export async function rutasAdmin(req, res, url) {
         masVistas: todas().map((p) => ({ id: p.id, titulo: p.titulo, anio: p.anio, ...vistas(p.id) }))
           .filter((p) => p.recientes > 0).sort((a, b) => b.recientes - a.recientes).slice(0, 5),
         disco: await disco(),
+        r2: await datosR2(),
         catalogo: {
           publicadas: todas().filter((p) => p.estado === 'publicada').length,
           enServidor: todas().filter((p) => p.video?.startsWith('videos/')).length,
+          enR2: todas().filter((p) => enR2(p.video)).length,
           desdeLink: todas().filter((p) => esExterno(p.video)).length,
           linksCaidos: todas().filter((p) => esExterno(p.video) && estadoEnlace(p.id)?.ok === false).length,
         },

@@ -45,7 +45,7 @@
       <button role="tab" data-seccion="suscriptores">Suscriptores</button>
       <button role="tab" data-seccion="publicidad">Publicidad</button>
       <button role="tab" data-seccion="planes">Planes y pagos</button>
-      <button role="tab" data-seccion="ajustes">Seguridad</button>
+      <button role="tab" data-seccion="ajustes">Ajustes</button>
     </nav>
 
     <!-- Resumen del negocio -->
@@ -97,6 +97,7 @@
           <fieldset class="modo">
             <legend>¿Cómo se ve la película?</legend>
             <label><input type="radio" name="modo" value="descargar" checked> <span><b>Guardarla en Cinetream</b> <span data-lugar="recomendado-guardar">(recomendado)</span>: se ve aunque el link deje de funcionar. <span data-lugar="guardar-nota">Carga más rápido en la red de tu casa.</span></span></label>
+            <label id="modo-r2" hidden><input type="radio" name="modo" value="r2"> <span><b>Guardarla en Cloudflare R2</b> (recomendado): se copia a tu almacenamiento de R2. Se ve aunque el link deje de funcionar y no ocupa el disco del servidor.</span></label>
             <label><input type="radio" name="modo" value="link"> <span><b>Reproducir desde el link</b> <span data-lugar="recomendado-link" hidden>(recomendado)</span>: no ocupa espacio en el disco, pero depende de que el sitio siga online.</span></label>
           </fieldset>
           <label class="derechos"><input type="checkbox" id="link-derechos"> <span>Tengo derecho a publicar esta película (es de dominio público, tiene una licencia que lo permite o tengo los derechos).</span></label>
@@ -136,6 +137,7 @@
           <option value="descargando">Descargando</option>
           <option value="error">Con error</option>
           <option value="servidor">Guardadas en el servidor</option>
+          <option value="r2">En Cloudflare R2</option>
           <option value="link">Desde un link</option>
           <option value="caido">Con el link caído</option>
         </select>
@@ -200,8 +202,27 @@
       </section>
     </div>
 
-    <!-- Seguridad -->
+    <!-- Ajustes: almacenamiento y seguridad -->
     <div class="seccion" id="seccion-ajustes" hidden>
+      <section class="tarjeta-panel">
+        <div class="panel-titulo"><h2>Videos en Cloudflare R2</h2><span class="estado" id="r2-estado"></span></div>
+        <p class="nota">R2 guarda tus películas fuera del servidor: no llenan el disco de Render, se ven aunque el sitio original las borre y
+          no se paga el tráfico. Los primeros 10 GB son gratis; después, unos USD 0,015 por GB al mes. El bucket queda privado:
+          cada reproducción recibe un link firmado que vence solo, así nadie puede compartir el video por fuera de Cinetream.</p>
+        <div id="r2-datos"></div>
+        <div class="acciones"><button class="btn principal" id="r2-probar">Probar la conexión</button></div>
+        <p class="error" id="r2-error" role="alert"></p>
+        <details class="pasos-r2" id="r2-pasos">
+          <summary>Cómo conectar R2 (una sola vez, unos 5 minutos)</summary>
+          <ol class="pasos-pago">
+            <li>Entrá a <b>dash.cloudflare.com</b> (creá la cuenta si no tenés) y abrí <b>R2 Object Storage</b>. La primera vez pide una tarjeta, pero los primeros 10 GB no se cobran.</li>
+            <li>Tocá <b>Create bucket</b>, ponele de nombre <code>cinetream</code> y crealo (dejalo privado).</li>
+            <li>En R2, abrí <b>Manage API tokens → Create API token</b>. Permiso: <b>Admin Read &amp; Write</b> (hace falta para que Cinetream configure las subidas). Copiá el <b>Access Key ID</b>, el <b>Secret Access Key</b> y tu <b>Account ID</b>.</li>
+            <li>En Render, en tu servicio → <b>Environment</b>, agregá: <code>R2_CUENTA</code> (Account ID), <code>R2_CLAVE_ID</code>, <code>R2_CLAVE_SECRETA</code> y <code>R2_BUCKET</code> (<code>cinetream</code>). Guardá: Render reinicia solo.</li>
+            <li>Volvé acá y tocá <b>Probar la conexión</b>.</li>
+          </ol>
+        </details>
+      </section>
       <section class="tarjeta-panel">
         <h2>Contraseña del administrador</h2>
         <p class="nota">Cambiala cada tanto y no la compartas. Al cambiarla se cierran las sesiones abiertas en otros equipos.</p>
