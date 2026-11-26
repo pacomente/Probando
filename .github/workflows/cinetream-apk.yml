@@ -51,8 +51,10 @@ jobs:
           CINETREAM_FIRMA_ALIAS: ${{ secrets.CINETREAM_FIRMA_ALIAS }}
         run: |
           chmod +x gradlew
+          # La dirección del servidor sale de android/gradle.properties, salvo que se cargue la variable CINETREAM_SERVIDOR
+          SERVIDOR="${{ vars.CINETREAM_SERVIDOR }}"
           ./gradlew assembleRelease --no-daemon \
-            -Pcinetream.servidor="${{ vars.CINETREAM_SERVIDOR }}" \
+            ${SERVIDOR:+-Pcinetream.servidor="$SERVIDOR"} \
             -Pcinetream.version="1.0.${{ github.run_number }}" \
             -Pcinetream.numero="${{ github.run_number }}"
           mkdir -p salida

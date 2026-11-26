@@ -32,8 +32,34 @@ let configurado = true;
 async function iniciar() {
   const estado = await api('/estado');
   configurado = estado.configurado;
+  aplicarLugar(estado);
   if (estado.sesion) mostrarPanel();
   else mostrarAcceso();
+}
+
+// Textos según dónde corre Cinetream: en internet (Render) o en una PC de la casa
+let enInternet = false;
+function aplicarLugar(estado) {
+  enInternet = Boolean(estado.enInternet);
+  const lugar = (n) => document.querySelectorAll(`[data-lugar="${n}"]`);
+  const dir = estado.direccion || location.origin;
+  $('#admin-lugar').textContent = enInternet ? `En internet · ${dir.replace(/^https?:\/\//, '')}` : 'En esta PC';
+  $('#admin-lugar').classList.toggle('en-internet', enInternet);
+  $('#pagos-webhook').textContent = `${dir}/api/pagos/mercadopago`;
+  if (!enInternet) return;
+  // En internet conviene reproducir desde el link: no llena el disco del servidor
+  lugar('recomendado-guardar').forEach((e) => { e.hidden = true; });
+  lugar('recomendado-link').forEach((e) => { e.hidden = false; });
+  lugar('guardar-nota').forEach((e) => { e.textContent = 'Ocupa espacio en el disco del servidor.'; });
+  lugar('subir-nota').forEach((e) => { e.textContent = ' al servidor (ocupa espacio en el disco)'; });
+  const link = $('#link-alta [name="modo"][value="link"]');
+  if (link) link.checked = true;
+  lugar('paso-token').forEach((e) => {
+    e.innerHTML = estado.render
+      ? 'En Render, entrá al servicio → <b>Environment</b> y cargá <code>MP_ACCESS_TOKEN</code> con tu token. Render reinicia Cinetream solo.'
+      : 'Cargá la variable <code>MP_ACCESS_TOKEN</code> con tu token en tu servicio de hosting y reiniciá Cinetream.';
+  });
+  lugar('paso-https').forEach((e) => { e.innerHTML = `Listo: Cinetream ya está en internet con HTTPS en <b>${esc(dir)}</b>.`; });
 }
 
 function mostrarAcceso() {
@@ -335,7 +361,7 @@ function pintar() {
   const ESTADOS = { publicada: 'Publicada', oculta: 'Oculta', descargando: 'Descargando', error: 'Error' };
   $('#catalogo').innerHTML = lista.length ? lista.map((p) => {
     const t = catalogo.trabajos[p.id];
-    const origen = !p.video ? 'Sin archivo (señal de prueba)' : p.video.startsWith('videos/') ? 'Archivo en esta PC' : 'Desde un link';
+    const origen = !p.video ? 'Sin archivo (señal de prueba)' : p.video.startsWith('videos/') ? (enInternet ? 'Guardada en el servidor' : 'Archivo en esta PC') : 'Desde un link';
     const avance = p.estado === 'descargando' && t
       ? `<div class="progreso-subida"><i style="width:${t.total ? (t.bytes / t.total) * 100 : 3}%"></i><span>${tamano(t.bytes)}${t.total ? ` de ${tamano(t.total)}` : ''}</span></div>` : '';
     return `<li class="fila-peli" data-id="${esc(p.id)}">
@@ -403,7 +429,7 @@ function abrirEditor(p) {
   $('#editor-motivo').value = editando.motivo || 'anillos';
   $('#editor-error').textContent = '';
   $('#editor-cuadro').hidden = !editando.video?.startsWith('videos/');
-  $('#editor-video').textContent = editando.video ? `Video: ${editando.video.startsWith('videos/') ? 'archivo en esta PC' : editando.video}` : 'Sin archivo: se reproduce una señal de prueba.';
+  $('#editor-video').textContent = editando.video ? `Video: ${editando.video.startsWith('videos/') ? (enInternet ? 'guardada en el servidor' : 'archivo en esta PC') : editando.video}` : 'Sin archivo: se reproduce una señal de prueba.';
   pintarAficheEditor();
   $('#editor').showModal();
 }
@@ -692,5 +718,5 @@ setInterval(() => {
 }, 1500);
 
 iniciar().catch(() => {
-  document.body.innerHTML = '<p class="vacio" style="margin:2rem">No se pudo conectar con el servidor de Cinetream. Abrí el administrador desde la PC donde está instalado.</p>';
+  document.body.innerHTML = '<p class="vacio" style="margin:2rem">No se pudo conectar con el servidor de Cinetream. Revisá que esté andando y volvé a cargar la página.</p>';
 });

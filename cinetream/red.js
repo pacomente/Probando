@@ -9,5 +9,10 @@ export function ipCliente(req) {
   return req.socket.remoteAddress || '';
 }
 
+// Cinetream publicado en internet (Render u otro hosting) o en una PC de la casa
+export const enInternet = DETRAS_DE_PROXY;
+export const direccionPublica = (req) => process.env.RENDER_EXTERNAL_URL
+  || (enInternet ? `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}` : '');
+
 // Pedido hecho desde la misma PC donde corre Cinetream (nunca es así en Render)
 export const esLocal = (req) => !DETRAS_DE_PROXY && LOCALES.includes(req.socket.remoteAddress);

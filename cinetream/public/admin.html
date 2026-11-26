@@ -33,6 +33,7 @@
     <header class="admin-barra">
       <span class="logo"><span class="logo-marca">CINE</span><span class="logo-sub">TREAM</span></span>
       <span class="admin-rol">Administrador</span>
+      <span class="admin-lugar" id="admin-lugar"></span>
       <span class="espacio"></span>
       <a class="btn" href="./">Ver la plataforma</a>
       <button class="btn contorno" id="salir">Salir</button>
@@ -84,8 +85,8 @@
           <div class="alta-campos" id="link-campos"></div>
           <fieldset class="modo">
             <legend>¿Cómo se ve la película?</legend>
-            <label><input type="radio" name="modo" value="descargar" checked> <span><b>Descargarla a esta PC</b> (recomendado): se ve aunque el link deje de funcionar y carga más rápido en la red de tu casa.</span></label>
-            <label><input type="radio" name="modo" value="link"> <span><b>Reproducir desde el link</b>: no ocupa espacio, pero depende de que el sitio siga online.</span></label>
+            <label><input type="radio" name="modo" value="descargar" checked> <span><b>Guardarla en Cinetream</b> <span data-lugar="recomendado-guardar">(recomendado)</span>: se ve aunque el link deje de funcionar. <span data-lugar="guardar-nota">Carga más rápido en la red de tu casa.</span></span></label>
+            <label><input type="radio" name="modo" value="link"> <span><b>Reproducir desde el link</b> <span data-lugar="recomendado-link" hidden>(recomendado)</span>: no ocupa espacio en el disco, pero depende de que el sitio siga online.</span></label>
           </fieldset>
           <label class="derechos"><input type="checkbox" id="link-derechos"> <span>Tengo derecho a publicar esta película (es de dominio público, tiene una licencia que lo permite o tengo los derechos).</span></label>
           <div class="acciones">
@@ -97,7 +98,7 @@
       </div>
 
       <div class="pestana-cuerpo" id="pestana-archivo" hidden>
-        <p class="nota">Subí un archivo de video desde esta PC. MP4 con video H.264 y audio AAC es el formato que reproducen todas las
+        <p class="nota">Subí un archivo de video desde tu computadora<span data-lugar="subir-nota"></span>. MP4 con video H.264 y audio AAC es el formato que reproducen todas las
           teles y celulares. Después podés tomar la portada de un cuadro del video.</p>
         <form class="alta" id="archivo-alta">
           <label class="soltar" id="archivo-soltar">
@@ -169,9 +170,9 @@
         <div id="pagos-estado"></div>
         <ol class="pasos-pago">
           <li>Creá una aplicación en <b>Mercado Pago Developers</b> (Tus integraciones) y copiá el <b>Access Token</b> de producción.</li>
-          <li>Arrancá Cinetream con <code>MP_ACCESS_TOKEN=tu_token</code> (en Windows, agregalo en <code>Ver-Cinetream.bat</code> con <code>set MP_ACCESS_TOKEN=…</code>).</li>
-          <li>En la aplicación de Mercado Pago, configurá las notificaciones (webhooks) del tema <b>Suscripciones</b> hacia <code>https://tu-dominio/api/pagos/mercadopago</code> y copiá la clave secreta en <code>MP_WEBHOOK_SECRET</code>.</li>
-          <li>Para cobrar, Cinetream tiene que estar publicado en internet con HTTPS (un servidor o un servicio de hosting), no solo en la red de tu casa.</li>
+          <li data-lugar="paso-token">Arrancá Cinetream con <code>MP_ACCESS_TOKEN=tu_token</code> (en Windows, agregalo en <code>Ver-Cinetream.bat</code> con <code>set MP_ACCESS_TOKEN=…</code>).</li>
+          <li>En la aplicación de Mercado Pago, configurá las notificaciones (webhooks) del tema <b>Suscripciones</b> hacia <code id="pagos-webhook">https://tu-dominio/api/pagos/mercadopago</code> y copiá la clave secreta en <code>MP_WEBHOOK_SECRET</code>.</li>
+          <li data-lugar="paso-https">Para cobrar, Cinetream tiene que estar publicado en internet con HTTPS (un servidor o un servicio de hosting), no solo en la red de tu casa.</li>
         </ol>
       </section>
     </div>

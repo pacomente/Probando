@@ -12,7 +12,7 @@ import { analizar, descargar, ErrorImportar } from './importar.js';
 import { activarPlan, buscarCuenta, guardarCuentas, guardarPlanes, listaPlanes, planEfectivo, todasLasCuentas } from './cuentas.js';
 import { actualizarCampana, buscarCampana, campanas, CARPETA_PIEZAS, crearCampana, ponerPieza, quitarCampana } from './publicidad.js';
 import { modoPrueba } from './pagos.js';
-import { esLocal, ipCliente } from './red.js';
+import { direccionPublica, enInternet, esLocal, ipCliente } from './red.js';
 
 const HORAS_SESION = 12;
 const sesiones = new Map(); // id → vence
@@ -113,7 +113,12 @@ async function importar(p, info, modo) {
 export async function rutasAdmin(req, res, url) {
   const ruta = url.pathname.replace(/^\/api\/admin/, '');
   try {
-    if (ruta === '/estado') return json(res, 200, { configurado: adminConfigurado(), sesion: sesionValida(req) });
+    if (ruta === '/estado') {
+      return json(res, 200, {
+        configurado: adminConfigurado(), sesion: sesionValida(req),
+        enInternet, direccion: direccionPublica(req), render: Boolean(process.env.RENDER),
+      });
+    }
 
     if (ruta === '/configurar' && req.method === 'POST') {
       if (adminConfigurado()) return json(res, 403, { error: 'El administrador ya tiene contraseña.' });

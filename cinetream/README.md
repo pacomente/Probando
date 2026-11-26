@@ -219,9 +219,9 @@ Cosas a saber:
   porque no tiene disco: cada reinicio borraría cuentas, catálogo y películas.
 - **Películas:** conviene agregarlas **por link** (Internet Archive, por ejemplo) con «Reproducir desde el link»:
   no ocupan el disco y se ven más fluidas. Subir películas enteras funciona, pero llena el disco rápido.
-- **La app de Android** se conecta escribiendo la dirección de Render en «Servidor de Cinetream». Para que abra directo
-  tu servidor, en GitHub → *Settings → Secrets and variables → Actions → Variables* creá `CINETREAM_SERVIDOR`
-  con tu dirección de Render: las próximas apps que compile GitHub ya vienen con esa dirección.
+- **La app de Android** abre directo `https://cinestream-fsji.onrender.com`, la dirección que está en
+  `android/gradle.properties` (`cinetream.servidor`). Si cambiás de servidor, cambiala ahí (o creá la variable
+  `CINETREAM_SERVIDOR` en GitHub → *Settings → Secrets and variables → Actions → Variables*) y GitHub compila las apps nuevas.
 - La página `descargar.html` ofrece los APK de las Releases de GitHub (variable `DESCARGAS_URL`).
 - Cada cambio que se sube a `main` se publica solo en Render.
 
