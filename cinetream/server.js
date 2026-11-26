@@ -8,8 +8,9 @@ import { readFile, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CARPETA_PORTADAS, CARPETA_VIDEOS, publicadas } from './datos.js';
-import { rutasAdmin } from './admin.js';
+import { buscarPelicula, CARPETA_PORTADAS, CARPETA_VIDEOS, publicadas } from './datos.js';
+import { rutasAdmin, sesionValida } from './admin.js';
+import { linkReproduccion, r2Configurado } from './r2.js';
 import { rutasCuenta } from './rutas-cuenta.js';
 import { cuentaDe, planEfectivo } from './cuentas.js';
 import { CARPETA_PIEZAS } from './publicidad.js';
@@ -84,9 +85,22 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/catalogo') {
       const plus = planEfectivo(cuentaDe(req)).plus;
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEGURIDAD });
-      return res.end(JSON.stringify({ peliculas: publicadas().map(({ fuente, estado, videoOriginal, ...p }) => (p.plus && !plus ? { ...p, video: null, bloqueada: true } : p)) }));
+      return res.end(JSON.stringify({ peliculas: publicadas().map(({ fuente, estado, videoOriginal, tamano, ...p }) => (p.plus && !plus ? { ...p, video: null, bloqueada: true }
+        : /^r2:/.test(p.video) ? { ...p, video: `r2/${p.id}` } : p)) }));
     }
     // Cuenta, planes, pagos y publicidad
+    // Videos en Cloudflare R2: se reenvía a un link firmado que vence solo (el bucket no es público)
+    if (url.pathname.startsWith('/r2/')) {
+      const peli = buscarPelicula(url.pathname.slice(4));
+      const admin = sesionValida(req);
+      if (!peli || !/^r2:/.test(peli.video) || (peli.estado !== 'publicada' && !admin)) { res.writeHead(404, SEGURIDAD); return res.end(); }
+      if (peli.plus && !admin && !planEfectivo(cuentaDe(req)).plus) {
+        res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8', ...SEGURIDAD });
+        return res.end('Este título es solo para suscriptores Plus.');
+      }
+      res.writeHead(302, { Location: linkReproduccion(peli.video.slice(3)), 'Cache-Control': 'no-store', ...SEGURIDAD });
+      return res.end();
+    }
     // Una reproducción (la manda la plataforma cuando arranca una película)
     if (url.pathname === '/api/vista' && req.method === 'POST') {
       let cuerpo = '';
@@ -167,6 +181,7 @@ server.listen(PORT, HOST, () => {
   console.log(modoPrueba()
     ? '   Pagos: MODO PRUEBA (no se cobra). Para cobrar, configurá MP_ACCESS_TOKEN de Mercado Pago.'
     : '   Pagos: Mercado Pago activo.');
+  console.log(r2Configurado() ? `   Videos: Cloudflare R2 (bucket ${process.env.R2_BUCKET})` : '   Videos: en el disco o desde links (Cloudflare R2 sin configurar).');
   if (process.env.RENDER_EXTERNAL_URL) {
     console.log(`   En internet: ${process.env.RENDER_EXTERNAL_URL} (administrador: ${process.env.RENDER_EXTERNAL_URL}/admin.html)`);
     return;

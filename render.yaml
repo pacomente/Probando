@@ -39,3 +39,12 @@ services:
         sync: false
       - key: MP_WEBHOOK_SECRET
         sync: false
+      # Opcional: videos en Cloudflare R2 (ver «Videos en Cloudflare R2» en el README)
+      - key: R2_CUENTA
+        sync: false
+      - key: R2_CLAVE_ID
+        sync: false
+      - key: R2_CLAVE_SECRETA
+        sync: false
+      - key: R2_BUCKET
+        sync: false

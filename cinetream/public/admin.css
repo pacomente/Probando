@@ -225,3 +225,7 @@ body.admin { font-size: 15px; min-height: 100vh; }
 .ficha-servidor dt { color: var(--suave); }
 .ficha-servidor dd { margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 760px) { .paneles-dobles { grid-template-columns: minmax(0, 1fr); } .ficha-servidor { grid-template-columns: minmax(0, 1fr); } .ficha-servidor dd { margin-bottom: 0.5rem; } }
+.origen-r2::before { background: #f6821f; }
+.pasos-r2 summary { cursor: pointer; font-weight: 600; margin-bottom: 0.6rem; }
+.pasos-r2[open] summary { margin-bottom: 0.8rem; }
+#r2-datos .resumen { margin: 0.4rem 0 0.8rem; }

@@ -40,6 +40,21 @@ async function iniciar() {
 
 // Textos según dónde corre Cinetream: en internet (Render) o en una PC de la casa
 let enInternet = false;
+// Cloudflare R2: si está configurado, pasa a ser el destino recomendado de los videos
+let r2 = { configurado: false };
+const enR2 = (v) => /^r2:/.test(v || '');
+const urlVideo = (p) => (enR2(p.video) ? `r2/${p.id}` : p.video);
+function aplicarR2(datos) {
+  r2 = datos || { configurado: false };
+  $('#modo-r2').hidden = !r2.configurado;
+  if (r2.configurado) {
+    document.querySelectorAll('[data-lugar="recomendado-guardar"], [data-lugar="recomendado-link"]').forEach((e) => { e.hidden = true; });
+    const opcion = $('#link-alta [name="modo"][value="r2"]');
+    if (opcion && !aplicarR2.elegido) { opcion.checked = true; aplicarR2.elegido = true; }
+    document.querySelectorAll('[data-lugar="subir-nota"]').forEach((e) => { e.textContent = ' directo a Cloudflare R2 (no pasa por el servidor)'; });
+  }
+}
+
 function aplicarLugar(estado) {
   enInternet = Boolean(estado.enInternet);
   const lugar = (n) => document.querySelectorAll(`[data-lugar="${n}"]`);
@@ -204,8 +219,25 @@ zona.addEventListener('drop', (e) => {
   if (archivo) { const dt = new DataTransfer(); dt.items.add(archivo); $('#archivo-video').files = dt.files; elegirArchivo(archivo); }
 });
 
+// Con R2 el archivo va directo del navegador a Cloudflare (no pasa por el servidor ni ocupa su disco)
+async function subirArchivoR2(archivo, base, alProgreso) {
+  const tipo = archivo.type || 'video/mp4';
+  const { url, video } = await enviar('/r2/subida', 'POST', { base, tipo });
+  await new Promise((resolver, rechazar) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    xhr.setRequestHeader('Content-Type', tipo);
+    xhr.upload.onprogress = (e) => alProgreso(e.loaded, e.total);
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolver() : rechazar(new Error(`Cloudflare R2 rechazó la subida (${xhr.status}).`)));
+    xhr.onerror = () => rechazar(new Error('Se cortó la subida a Cloudflare R2. Revisá la conexión y probá de nuevo.'));
+    xhr.send(archivo);
+  });
+  return { video, tamano: archivo.size };
+}
+
 // Con XMLHttpRequest para mostrar el avance de la subida
 function subirArchivo(archivo, base, alProgreso) {
+  if (r2.configurado) return subirArchivoR2(archivo, base, alProgreso);
   return new Promise((resolver, rechazar) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', `api/admin/subir?base=${encodeURIComponent(base)}`);
@@ -235,13 +267,13 @@ $('#archivo-alta').addEventListener('submit', async (e) => {
   boton.disabled = true;
   try {
     const base = datos.titulo.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    const { video } = await subirArchivo(archivo, base, (cargado, total) => {
+    const { video, tamano: bytes } = await subirArchivo(archivo, base, (cargado, total) => {
       const pct = total ? (cargado / total) * 100 : 0;
       barra.querySelector('i').style.width = `${pct}%`;
       barra.querySelector('span').textContent = `Subiendo… ${Math.floor(pct)}% (${tamano(cargado)} de ${tamano(total)})`;
     });
     const { publicar, ...resto } = datos;
-    const { pelicula } = await enviar('/peliculas', 'POST', { datos: { ...resto, video, estado: publicar ? 'publicada' : 'oculta' }, derechos: true });
+    const { pelicula } = await enviar('/peliculas', 'POST', { datos: { ...resto, video, tamano: bytes || 0, estado: publicar ? 'publicada' : 'oculta' }, derechos: true });
     barra.querySelector('span').textContent = 'Preparando la portada y la duración…';
     await completarAutomatico(pelicula);
     avisar(`«${pelicula.titulo}» se agregó al catálogo`);
@@ -313,7 +345,7 @@ async function completarAutomatico(p) {
   const cambios = {};
   const local = p.video?.startsWith('videos/');
   if (p.video && !p.duracionMin) {
-    try { cambios.duracionMin = Math.round((await cargarVideo(p.video)).duration / 60); } catch { /* sin duración */ }
+    try { cambios.duracionMin = Math.round((await cargarVideo(urlVideo(p))).duration / 60); } catch { /* sin duración */ }
   }
   let actual = p;
   if (!p.portada && local) {
@@ -335,12 +367,14 @@ const completadas = new Set();
 
 async function cargar() {
   catalogo = await api('/catalogo');
+  if (catalogo.r2) aplicarR2(catalogo.r2);
   // Cuando termina una descarga, se completan solos la duración, la portada y los colores
   for (const [id, t] of Object.entries(catalogo.trabajos)) {
     const p = catalogo.peliculas.find((x) => x.id === id);
     if (t.estado === 'listo' && p && !completadas.has(id)) {
       completadas.add(id);
       if (t.tipo === 'guardar') avisar(`«${p.titulo}» ya está guardada en el servidor`);
+      else if (t.tipo === 'r2') avisar(`«${p.titulo}» ya está en Cloudflare R2`);
       else completarAutomatico(p).then(() => { avisar(`«${p.titulo}» está lista. Revisala y publicala.`); cargar(); });
     }
   }
@@ -354,6 +388,7 @@ function origenDe(p) {
   const x = catalogo.extra[p.id] || {};
   if (!p.video) return { clase: 'origen-ninguno', texto: 'Sin video: se ve una señal de prueba' };
   if (p.video.startsWith('videos/')) return { clase: 'origen-servidor', texto: `Guardada en ${enInternet ? 'el servidor' : 'esta PC'} · ${tamano(x.bytes || 0)}` };
+  if (enR2(p.video)) return { clase: 'origen-r2', texto: `En Cloudflare R2 · ${tamano(x.bytes || 0)}` };
   if (x.enlace?.ok === false) return { clase: 'origen-caido', texto: `Link caído · ${sitio(p.video)}`, detalle: x.enlace.detalle };
   return { clase: 'origen-link', texto: `Desde un link · ${sitio(p.video)} · no ocupa lugar` };
 }
@@ -388,6 +423,7 @@ function pintar() {
     ['Publicadas', cuenta('publicada'), cuenta('oculta') ? `${cuenta('oculta')} ocultas` : ''],
     ['Desde un link', conLink.length, caidos ? `${caidos} con el link caído` : 'no ocupan lugar en el disco'],
     ['Guardadas en el servidor', enServidor.length, tamano(catalogo.espacio)],
+    ...(r2.configurado ? [['En Cloudflare R2', ps.filter((p) => enR2(p.video)).length, r2.total ? tamano(r2.total) : 'no ocupan el disco']] : []),
     ['Descargando', cuenta('descargando') + Object.values(catalogo.trabajos).filter((t) => t.tipo === 'guardar' && t.estado === 'descargando').length, ''],
   ].map(([t, v, d]) => dato(t, v, d)).join('');
   $('#almacenamiento').innerHTML = `<p class="nota"><b>Desde un link:</b> el video no se guarda en ${enInternet ? 'el servidor' : 'esta PC'}; se reproduce directo desde el sitio original
@@ -399,6 +435,7 @@ function pintar() {
     servidor: (p) => p.video?.startsWith('videos/'),
     link: (p) => esLink(p.video),
     caido: (p) => esLink(p.video) && catalogo.extra[p.id]?.enlace?.ok === false,
+    r2: (p) => enR2(p.video),
   };
   const pasa = FILTROS[filtro] || ((p) => !filtro || p.estado === filtro);
   const lista = ps.filter((p) => pasa(p) && (!texto || `${p.titulo} ${p.direccion} ${(p.generos || []).join(' ')}`.toLowerCase().includes(texto)));
@@ -412,17 +449,18 @@ function pintar() {
     const t = catalogo.trabajos[p.id];
     const o = origenDe(p);
     const v = x(p).vistas || { total: 0, recientes: 0 };
-    const guardando = t?.tipo === 'guardar' && t.estado === 'descargando';
+    const guardando = (t?.tipo === 'guardar' || t?.tipo === 'r2') && t.estado === 'descargando';
     const bajando = (p.estado === 'descargando' || guardando) && t;
     const avance = bajando
-      ? `<div class="progreso-subida"><i style="width:${t.total ? (t.bytes / t.total) * 100 : 3}%"></i><span>${guardando ? 'Guardando en el servidor: ' : ''}${tamano(t.bytes)}${t.total ? ` de ${tamano(t.total)}` : ''}</span></div>` : '';
+      ? `<div class="progreso-subida"><i style="width:${t.total ? (t.bytes / t.total) * 100 : 3}%"></i><span>${guardando ? (t.tipo === 'r2' ? 'Pasando a Cloudflare R2: ' : 'Guardando en el servidor: ') : ''}${tamano(t.bytes)}${t.total ? ` de ${tamano(t.total)}` : ''}</span></div>` : '';
     const acciones = [];
     if (p.estado === 'descargando' || guardando) acciones.push('<button class="btn" data-accion="cancelar">Cancelar</button>');
     else {
       acciones.push('<button class="btn" data-accion="editar">Editar</button>');
       if (p.estado !== 'error') acciones.push(`<button class="btn" data-accion="${p.estado === 'publicada' ? 'ocultar' : 'publicar'}">${p.estado === 'publicada' ? 'Ocultar' : 'Publicar'}</button>`);
-      if (esLink(p.video)) acciones.push('<button class="btn" data-accion="guardar" title="Baja el video al disco: se ve aunque el link deje de funcionar">Guardar en el servidor</button>');
-      if (p.video?.startsWith('videos/') && esLink(p.videoOriginal)) acciones.push('<button class="btn" data-accion="liberar" title="Borra el archivo y vuelve a reproducirse desde el link original">Liberar espacio</button>');
+      if (r2.configurado && (esLink(p.video) || p.video?.startsWith('videos/'))) acciones.push('<button class="btn" data-accion="r2" title="Copia el video a Cloudflare R2: se ve aunque el link deje de funcionar y libera el disco">Pasar a R2</button>');
+      else if (esLink(p.video)) acciones.push('<button class="btn" data-accion="guardar" title="Baja el video al disco: se ve aunque el link deje de funcionar">Guardar en el servidor</button>');
+      if ((p.video?.startsWith('videos/') || enR2(p.video)) && esLink(p.videoOriginal)) acciones.push('<button class="btn" data-accion="liberar" title="Borra el archivo y vuelve a reproducirse desde el link original">Liberar espacio</button>');
     }
     acciones.push('<button class="btn peligro" data-accion="eliminar">Eliminar</button>');
     return `<li class="fila-peli" data-id="${esc(p.id)}">
@@ -469,6 +507,11 @@ $('#catalogo').addEventListener('click', async (e) => {
       case 'publicar': await enviar(`/peliculas/${id}`, 'PUT', { datos: { estado: 'publicada' } }); avisar(`«${p.titulo}» ya se ve en la plataforma`); break;
       case 'ocultar': await enviar(`/peliculas/${id}`, 'PUT', { datos: { estado: 'oculta' } }); avisar(`«${p.titulo}» se ocultó`); break;
       case 'cancelar': await enviar(`/peliculas/${id}/cancelar`, 'POST', {}); break;
+      case 'r2':
+        await enviar(`/peliculas/${id}/r2`, 'POST', {});
+        completadas.delete(id);
+        avisar(`Pasando «${p.titulo}» a Cloudflare R2. Mientras tanto se sigue viendo como antes.`);
+        break;
       case 'guardar':
         await enviar(`/peliculas/${id}/guardar`, 'POST', {});
         completadas.delete(id);
@@ -516,7 +559,7 @@ function abrirEditor(p) {
   $('#editor-motivo').value = editando.motivo || 'anillos';
   $('#editor-error').textContent = '';
   $('#editor-cuadro').hidden = !editando.video?.startsWith('videos/');
-  $('#editor-video').textContent = editando.video ? `Video: ${editando.video.startsWith('videos/') ? (enInternet ? 'guardada en el servidor' : 'archivo en esta PC') : editando.video}` : 'Sin archivo: se reproduce una señal de prueba.';
+  $('#editor-video').textContent = editando.video ? `Video: ${editando.video.startsWith('videos/') ? (enInternet ? 'guardada en el servidor' : 'archivo en esta PC') : enR2(editando.video) ? 'en Cloudflare R2' : editando.video}` : 'Sin archivo: se reproduce una señal de prueba.';
   pintarAficheEditor();
   $('#editor').showModal();
 }
@@ -580,6 +623,7 @@ function mostrarPanel() {
   $('#panel').hidden = false;
   cargar();
   cargarNegocio();
+  api('/r2').then(aplicarR2).catch(() => {});
 }
 
 // ---------- Secciones ----------
@@ -625,7 +669,7 @@ async function cargarNegocio() {
     ? negocio.masVistas.map((p) => `<li><span>${esc(p.titulo)} <small>${esc(p.anio)}</small></span><b>${p.recientes.toLocaleString('es-AR')}</b></li>`).join('')
     : '<li class="nota">Todavía nadie vio películas este mes.</li>';
   $('#negocio-disco').innerHTML = barraDisco(negocio.disco)
-    + `<p class="nota">${negocio.catalogo.desdeLink} películas desde un link (no ocupan lugar) · ${negocio.catalogo.enServidor} guardadas en el servidor${negocio.catalogo.linksCaidos ? ` · <b class="error">${negocio.catalogo.linksCaidos} con el link caído</b>` : ''}</p>`;
+    + `<p class="nota">${negocio.catalogo.desdeLink} películas desde un link (no ocupan lugar) · ${negocio.catalogo.enServidor} guardadas en el servidor${negocio.r2?.configurado ? ` · ${negocio.catalogo.enR2} en Cloudflare R2${negocio.r2.total ? ` (${tamano(negocio.r2.total)})` : ''}` : ''}${negocio.catalogo.linksCaidos ? ` · <b class="error">${negocio.catalogo.linksCaidos} con el link caído</b>` : ''}</p>`;
 }
 
 // ---------- Suscriptores ----------
@@ -851,7 +895,36 @@ $('#cerrar-sesiones').addEventListener('click', async () => {
     avisar(r.cerradas ? sesionesCerradas(r.cerradas) : 'No había otras sesiones abiertas');
   } catch (err) { avisar(err.message); }
 });
+function pintarR2(d) {
+  aplicarR2(d);
+  const estado = $('#r2-estado');
+  estado.className = `estado ${d.configurado && !d.error ? 'estado-publicada' : 'estado-oculta'}`;
+  estado.textContent = !d.configurado ? 'Sin conectar' : d.error ? 'Con error' : 'Conectado';
+  $('#r2-pasos').open = !d.configurado;
+  $('#r2-datos').innerHTML = !d.configurado ? ''
+    : d.error ? `<p class="error">${esc(d.error)}</p>`
+      : `<div class="resumen">${[
+        dato('Bucket', d.bucket),
+        dato('Videos en R2', (d.cantidad ?? 0).toLocaleString('es-AR')),
+        dato('Espacio usado', tamano(d.total || 0), (d.total || 0) <= 10 * 1024 ** 3 ? 'gratis (hasta 10 GB)' : `unos USD ${(((d.total / 1024 ** 3) - 10) * 0.015).toFixed(2).replace('.', ',')} por mes`),
+      ].join('')}</div>`;
+}
+$('#r2-probar').addEventListener('click', async (e) => {
+  const b = e.currentTarget;
+  $('#r2-error').textContent = '';
+  b.disabled = true;
+  b.textContent = 'Probando…';
+  try {
+    const r = await enviar('/r2/probar', 'POST', {});
+    pintarR2(r);
+    avisar(r.cors ? 'Cloudflare R2 funciona: ya podés guardar películas ahí' : 'R2 funciona, pero el token no puede configurar las subidas desde el navegador (usá un token «Admin Read & Write»)');
+  } catch (err) { $('#r2-error').textContent = err.message; }
+  b.disabled = false;
+  b.textContent = 'Probar la conexión';
+});
+
 async function cargarAjustes() {
+  api('/r2').then(pintarR2).catch(() => {});
   const [n, c] = await Promise.all([api('/resumen'), api('/catalogo')]);
   const d = n.disco;
   const filas = [

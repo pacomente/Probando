@@ -70,6 +70,28 @@ En el catálogo del administrador cada película muestra dónde está su video y
 la otra: **Guardar en el servidor** baja el video al disco (mientras tanto se sigue viendo desde el link) y **Liberar espacio**
 borra el archivo y vuelve a reproducirla desde el link original, después de comprobar que ese link sigue andando.
 
+### Videos en Cloudflare R2 (recomendado para el catálogo propio)
+
+R2 es el almacenamiento de Cloudflare: guarda las películas fuera del servidor, así no llenan el disco de Render, se ven
+aunque el sitio original las borre y **no se paga el tráfico** (en otros servicios, cada vez que alguien mira se paga).
+Los primeros 10 GB son gratis; después cuesta unos USD 0,015 por GB al mes (100 GB ≈ USD 1,35 por mes).
+
+**Conectarlo (una sola vez):**
+
+1. En <https://dash.cloudflare.com> abrí **R2 Object Storage** (la primera vez pide una tarjeta, pero lo gratis no se cobra).
+2. **Create bucket** → nombre `cinetream` → dejalo privado.
+3. **Manage API tokens → Create API token** con permiso **Admin Read & Write**. Copiá el *Access Key ID*,
+   el *Secret Access Key* y tu *Account ID*.
+4. En Render → tu servicio → **Environment** agregá `R2_CUENTA`, `R2_CLAVE_ID`, `R2_CLAVE_SECRETA` y `R2_BUCKET`.
+5. En el administrador → **Ajustes → Probar la conexión**.
+
+**Cómo se usa:** con R2 conectado, «Agregar con un link» ofrece **Guardarla en Cloudflare R2** (Cinetream copia el video
+del link a R2), «Subir un archivo» sube directo desde tu compu a R2 (sin pasar por el servidor) y cada película guardada
+o desde un link tiene el botón **Pasar a R2**. Al eliminar una película se borra también de R2.
+
+**Seguridad:** el bucket queda privado. Cada vez que alguien da play, Cinetream le da un link firmado que vence a las
+6 horas, y los títulos Plus solo se los da a suscriptores Plus: nadie puede compartir el video por fuera de la plataforma.
+
 ### Más herramientas del administrador
 
 - **Resumen:** reproducciones de los últimos 30 días (gráfico por día), lo más visto, suscriptores por plan y el disco
@@ -77,7 +99,7 @@ borra el archivo y vuelve a reproducirla desde el link original, después de com
 - **Catálogo:** filtros por estado, por dónde está el video (servidor, link, link caído) y orden por vistas, título o peso.
   **Revisar links** prueba todos los videos «desde un link» y marca los que ya no funcionan.
 - **Suscriptores:** **Exportar planilla** baja todas las cuentas en un CSV que abre Excel o Google Sheets.
-- **Seguridad:** cambiar la contraseña del administrador (con medidor de fuerza; cierra las sesiones de otros equipos),
+- **Ajustes:** estado de Cloudflare R2 (videos, espacio y costo), cambiar la contraseña del administrador (con medidor de fuerza; cierra las sesiones de otros equipos),
   cerrar las otras sesiones y ver los datos del servidor.
 
 ## El catálogo: solo contenido legal
@@ -267,6 +289,7 @@ Esto es la plataforma (la parte que ve el público). Para venderla como servicio
 | `importar.js` | Análisis de links (Internet Archive, archivo directo, página con video) y descargas. |
 | `datos.js` | Catálogo y contraseña guardados en `datos/`. |
 | `estadisticas.js` | Reproducciones por película y estado de los links. |
+| `r2.js` | Videos en Cloudflare R2: firma de pedidos (compatible con S3), subidas por partes y links firmados. |
 | `red.js` | IP del visitante y pedidos locales, también detrás del proxy de Render. |
 | `../render.yaml` | Configuración para publicar en Render. |
 | `cuentas.js` | Cuentas, planes, sesiones y código para la tele. |
