@@ -14,6 +14,7 @@ import { rutasCuenta } from './rutas-cuenta.js';
 import { cuentaDe, planEfectivo } from './cuentas.js';
 import { CARPETA_PIEZAS } from './publicidad.js';
 import { modoPrueba } from './pagos.js';
+import { esLocal } from './red.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3500;
@@ -21,9 +22,10 @@ const PORT = Number(process.env.PORT) || 3500;
 const HOST = process.env.HOST || '0.0.0.0';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const VIDEOS_DIR = CARPETA_VIDEOS;
-const DESCARGAS_DIR = path.join(__dirname, 'descargas'); // APK de la app para Android (celular y tele)
+const DESCARGAS_DIR = process.env.CARPETA_DESCARGAS || path.join(__dirname, 'descargas'); // APK de la app para Android
+// Si el APK no está en el servidor, se ofrece desde otro lado (por ejemplo las Releases de GitHub)
+const DESCARGAS_URL = (process.env.DESCARGAS_URL || '').replace(/\/$/, '');
 const ADMIN_DESDE_RED = process.env.ADMIN_DESDE_RED === '1';
-const esLocal = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
 
 const TIPOS = {
   '.html': 'text/html; charset=utf-8',
@@ -125,7 +127,8 @@ const server = http.createServer(async (req, res) => {
       const apps = {};
       for (const tipo of ['celular', 'tele']) {
         const info = await stat(path.join(DESCARGAS_DIR, `cinetream-${tipo}.apk`)).catch(() => null);
-        apps[tipo] = info ? { url: `/descargas/cinetream-${tipo}.apk`, tamano: info.size, fecha: info.mtimeMs } : null;
+        apps[tipo] = info ? { url: `/descargas/cinetream-${tipo}.apk`, tamano: info.size, fecha: info.mtimeMs }
+          : DESCARGAS_URL ? { url: `${DESCARGAS_URL}/cinetream-${tipo}.apk` } : null;
       }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEGURIDAD });
       return res.end(JSON.stringify(apps));
@@ -154,6 +157,10 @@ server.listen(PORT, HOST, () => {
   console.log(modoPrueba()
     ? '   Pagos: MODO PRUEBA (no se cobra). Para cobrar, configurá MP_ACCESS_TOKEN de Mercado Pago.'
     : '   Pagos: Mercado Pago activo.');
+  if (process.env.RENDER_EXTERNAL_URL) {
+    console.log(`   En internet: ${process.env.RENDER_EXTERNAL_URL} (administrador: ${process.env.RENDER_EXTERNAL_URL}/admin.html)`);
+    return;
+  }
   // Direcciones para abrirla desde la tele o el celular en la misma red
   for (const lista of Object.values(os.networkInterfaces())) {
     for (const red of lista || []) {

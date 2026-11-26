@@ -5,6 +5,7 @@ import {
 } from './cuentas.js';
 import { cancelarEnMercadoPago, consultarSuscripcion, crearSuscripcion, firmaValida, modoPrueba } from './pagos.js';
 import { campanasVigentes, registrarEvento } from './publicidad.js';
+import { ipCliente } from './red.js';
 
 const DIA = 86400000;
 const fallos = new Map(); // ip → { n, desde }: freno a quien prueba contraseñas
@@ -22,7 +23,7 @@ function leerJSON(req, limite = 20000) {
     req.on('error', rechazar);
   });
 }
-const ip = (req) => req.socket.remoteAddress || '';
+const ip = ipCliente;
 const bloqueado = (req) => { const f = fallos.get(ip(req)); return f && Date.now() - f.desde < 15 * 60000 && f.n >= 10; };
 const fallo = (req) => { const f = fallos.get(ip(req)); if (!f || Date.now() - f.desde > 15 * 60000) fallos.set(ip(req), { n: 1, desde: Date.now() }); else f.n++; };
 const base = (req) => `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host}`;

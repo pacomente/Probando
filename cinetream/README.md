@@ -200,6 +200,31 @@ keytool -genkeypair -keystore cinetream.jks -alias cinetream -keyalg RSA -keysiz
 
 Al pasar de la clave de prueba a la tuya hay que desinstalar una vez la app vieja.
 
+## Ponerla en internet con Render
+
+Así Cinetream se ve desde cualquier lado (no solo en la wifi de tu casa), con https, y puede cobrar con Mercado Pago.
+El repositorio trae `render.yaml`, que configura todo:
+
+1. Entrá a <https://render.com> y creá una cuenta (podés entrar con GitHub).
+2. **New → Blueprint**, elegí el repositorio `Probando` y la rama `main` (primero uní el PR a `main`).
+3. Render muestra el servicio **cinetream** con un disco de 10 GB. Cargá `MP_ACCESS_TOKEN` y `MP_WEBHOOK_SECRET`
+   si ya querés cobrar (si no, dejalos vacíos: queda en modo prueba). Tocá **Apply**.
+4. En unos minutos queda andando en una dirección como `https://cinetream.onrender.com`.
+5. La **contraseña del administrador** la inventa Render: está en el servicio → *Environment* → `ADMIN_CLAVE`.
+   Entrá a `https://tu-servicio.onrender.com/admin.html` con esa contraseña.
+
+Cosas a saber:
+
+- **Costo:** plan Starter (unos USD 7 por mes) más el disco (unos USD 2,50 por mes por 10 GB). El plan gratis no sirve
+  porque no tiene disco: cada reinicio borraría cuentas, catálogo y películas.
+- **Películas:** conviene agregarlas **por link** (Internet Archive, por ejemplo) con «Reproducir desde el link»:
+  no ocupan el disco y se ven más fluidas. Subir películas enteras funciona, pero llena el disco rápido.
+- **La app de Android** se conecta escribiendo la dirección de Render en «Servidor de Cinetream». Para que abra directo
+  tu servidor, en GitHub → *Settings → Secrets and variables → Actions → Variables* creá `CINETREAM_SERVIDOR`
+  con tu dirección de Render: las próximas apps que compile GitHub ya vienen con esa dirección.
+- La página `descargar.html` ofrece los APK de las Releases de GitHub (variable `DESCARGAS_URL`).
+- Cada cambio que se sube a `main` se publica solo en Render.
+
 ## Para un servicio comercial
 
 Esto es la plataforma (la parte que ve el público). Para venderla como servicio falta:
@@ -220,6 +245,8 @@ Esto es la plataforma (la parte que ve el público). Para venderla como servicio
 | `admin.js` | Rutas del administrador: contraseña, importar, subir, editar y eliminar. |
 | `importar.js` | Análisis de links (Internet Archive, archivo directo, página con video) y descargas. |
 | `datos.js` | Catálogo y contraseña guardados en `datos/`. |
+| `red.js` | IP del visitante y pedidos locales, también detrás del proxy de Render. |
+| `../render.yaml` | Configuración para publicar en Render. |
 | `cuentas.js` | Cuentas, planes, sesiones y código para la tele. |
 | `pagos.js` | Suscripciones con Mercado Pago (o el modo prueba). |
 | `publicidad.js` | Campañas, piezas y estadísticas de publicidad. |

@@ -9,7 +9,7 @@ import { PELICULAS } from './public/catalogo.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const CARPETA_DATOS = process.env.CARPETA_DATOS || path.join(__dirname, 'datos');
-export const CARPETA_VIDEOS = path.join(__dirname, 'videos');
+export const CARPETA_VIDEOS = process.env.CARPETA_VIDEOS || path.join(__dirname, 'videos');
 export const CARPETA_PORTADAS = path.join(CARPETA_DATOS, 'portadas');
 const ARCHIVO_CATALOGO = path.join(CARPETA_DATOS, 'catalogo.json');
 const ARCHIVO_ADMIN = path.join(CARPETA_DATOS, 'admin.json');
@@ -96,6 +96,8 @@ function nuevoId(titulo) {
 
 // ---------- Clave del administrador ----------
 let admin = existsSync(ARCHIVO_ADMIN) ? JSON.parse(readFileSync(ARCHIVO_ADMIN, 'utf8')) : null;
+// En un servidor en internet (Render) la primera contraseña viene de la variable ADMIN_CLAVE
+if (!admin && process.env.ADMIN_CLAVE?.length >= 8) await definirClave(process.env.ADMIN_CLAVE);
 export const adminConfigurado = () => Boolean(admin);
 
 export async function definirClave(clave) {

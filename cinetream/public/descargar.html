@@ -45,10 +45,10 @@
     for (const tipo of ['celular', 'tele']) {
       const app = datos[tipo];
       document.querySelector(`#app-${tipo} .descarga-accion`).innerHTML = app
-        ? `<a class="btn principal" href="${app.url}" download>Descargar · ${mb(app.tamano)}</a>`
+        ? `<a class="btn principal" href="${app.url}" download>Descargar${app.tamano ? ` · ${mb(app.tamano)}` : ''}</a>`
         : '<p class="nota-prueba">Todavía no está en este servidor. Copiá el APK en la carpeta <code>descargas</code> de Cinetream.</p>';
     }
-    document.getElementById('url-tele').textContent = `${location.host}/descargas/cinetream-tele.apk`;
+    document.getElementById('url-tele').textContent = datos.tele && !datos.tele.tamano ? datos.tele.url.replace(/^https?:\/\//, '') : `${location.host}/descargas/cinetream-tele.apk`;
     document.getElementById('url-servidor').textContent = location.host;
   </script>
 </body>

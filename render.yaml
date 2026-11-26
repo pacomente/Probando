@@ -1,0 +1,41 @@
+# Cinetream en Render: New → Blueprint → elegir este repositorio.
+# Usa el plan Starter con un disco de 10 GB: ahí quedan el catálogo, las cuentas, las portadas, los avisos y los videos subidos.
+# (El plan gratis de Render no tiene disco: cada reinicio borraría todo.)
+services:
+  - type: web
+    name: cinetream
+    runtime: node
+    plan: starter
+    region: virginia
+    rootDir: cinetream
+    buildCommand: echo "Cinetream no necesita instalar dependencias"
+    startCommand: node server.js
+    healthCheckPath: /api/planes
+    autoDeploy: true
+    disk:
+      name: cinetream-datos
+      mountPath: /var/data
+      sizeGB: 10
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: CARPETA_DATOS
+        value: /var/data/datos
+      - key: CARPETA_VIDEOS
+        value: /var/data/videos
+      - key: CARPETA_DESCARGAS
+        value: /var/data/descargas
+      # El administrador se abre desde internet (https://tu-servicio.onrender.com/admin.html)
+      - key: ADMIN_DESDE_RED
+        value: "1"
+      # Contraseña inicial del administrador: Render la inventa; se ve en Environment del servicio
+      - key: ADMIN_CLAVE
+        generateValue: true
+      # La app de Android se baja de las Releases de GitHub
+      - key: DESCARGAS_URL
+        value: https://github.com/pacomente/Probando/releases/download/cinetream-app-main
+      # Para cobrar de verdad: el Access Token y la clave de webhooks de Mercado Pago (se cargan a mano)
+      - key: MP_ACCESS_TOKEN
+        sync: false
+      - key: MP_WEBHOOK_SECRET
+        sync: false

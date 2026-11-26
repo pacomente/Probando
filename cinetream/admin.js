@@ -12,6 +12,7 @@ import { analizar, descargar, ErrorImportar } from './importar.js';
 import { activarPlan, buscarCuenta, guardarCuentas, guardarPlanes, listaPlanes, planEfectivo, todasLasCuentas } from './cuentas.js';
 import { actualizarCampana, buscarCampana, campanas, CARPETA_PIEZAS, crearCampana, ponerPieza, quitarCampana } from './publicidad.js';
 import { modoPrueba } from './pagos.js';
+import { esLocal, ipCliente } from './red.js';
 
 const HORAS_SESION = 12;
 const sesiones = new Map(); // id → vence
@@ -43,7 +44,7 @@ function abrirSesion(req, res, datos = { ok: true }) {
   sesiones.set(id, Date.now() + HORAS_SESION * 3600000);
   json(res, 200, datos, { 'Set-Cookie': cookie(req, id, HORAS_SESION * 3600) });
 }
-const ip = (req) => req.socket.remoteAddress || '';
+const ip = ipCliente;
 function bloqueado(req) {
   const f = fallos.get(ip(req));
   return f && Date.now() - f.desde < 15 * 60000 && f.n >= 8;
@@ -116,6 +117,8 @@ export async function rutasAdmin(req, res, url) {
 
     if (ruta === '/configurar' && req.method === 'POST') {
       if (adminConfigurado()) return json(res, 403, { error: 'El administrador ya tiene contraseña.' });
+      // Desde internet nadie puede elegir la primera contraseña: se pone con la variable ADMIN_CLAVE (en Render se genera sola)
+      if (!esLocal(req)) return json(res, 403, { error: 'La primera contraseña se elige desde la PC del servidor o con la variable ADMIN_CLAVE.' });
       const { clave } = await leerJSON(req);
       if (typeof clave !== 'string' || clave.length < 8) return json(res, 400, { error: 'La contraseña tiene que tener al menos 8 caracteres.' });
       await definirClave(clave);
