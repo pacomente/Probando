@@ -162,3 +162,6 @@ body.admin { font-size: 15px; min-height: 100vh; }
   .plan-admin { grid-template-columns: minmax(0, 1fr); }
   .barra-plan { grid-template-columns: 6rem 1fr 2rem; }
 }
+.admin-lugar { font-size: 0.8rem; color: var(--suave); padding: 0.2rem 0.65rem; border-radius: 99rem; background: var(--fondo); border: 1px solid var(--linea); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 22rem; }
+.admin-lugar.en-internet::before { content: ""; display: inline-block; width: 0.5rem; height: 0.5rem; margin-right: 0.4rem; border-radius: 50%; background: #3ddc97; vertical-align: 0.05rem; }
+@media (max-width: 760px) { .admin-lugar { display: none; } }

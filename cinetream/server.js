@@ -99,7 +99,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/admin/') || url.pathname === '/admin.html') {
       if (!ADMIN_DESDE_RED && !esLocal(req)) {
         res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8', ...SEGURIDAD });
-        return res.end('El administrador de Cinetream solo se abre desde la PC donde está instalado.');
+        return res.end('El administrador de Cinetream solo se abre desde la PC donde está instalado (o con ADMIN_DESDE_RED=1).');
       }
       if (url.pathname !== '/admin.html') return await rutasAdmin(req, res, url);
     }
