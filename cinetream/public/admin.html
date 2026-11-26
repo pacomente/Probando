@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cinetream · Administrador</title>
+  <meta name="theme-color" content="#0c0d12">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=Figtree:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="estilos.css">
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body class="admin">
+  <!-- Primera vez: crear la contraseña. Después: entrar -->
+  <section class="acceso" id="acceso" hidden>
+    <form class="acceso-caja" id="acceso-form">
+      <span class="logo"><span class="logo-marca">CINE</span><span class="logo-sub">TREAM</span></span>
+      <h1 id="acceso-titulo">Administrador</h1>
+      <p class="nota" id="acceso-nota"></p>
+      <label for="acceso-clave">Contraseña</label>
+      <input id="acceso-clave" type="password" autocomplete="current-password" required minlength="8">
+      <label for="acceso-repetir" id="acceso-repetir-etiqueta" hidden>Repetí la contraseña</label>
+      <input id="acceso-repetir" type="password" autocomplete="new-password" hidden>
+      <button class="btn principal" id="acceso-boton">Entrar</button>
+      <p class="error" id="acceso-error" role="alert"></p>
+    </form>
+  </section>
+
+  <div class="panel" id="panel" hidden>
+    <header class="admin-barra">
+      <span class="logo"><span class="logo-marca">CINE</span><span class="logo-sub">TREAM</span></span>
+      <span class="admin-rol">Administrador</span>
+      <span class="espacio"></span>
+      <a class="btn" href="./">Ver la plataforma</a>
+      <button class="btn contorno" id="salir">Salir</button>
+    </header>
+
+    <nav class="secciones" role="tablist" aria-label="Secciones del administrador">
+      <button role="tab" data-seccion="negocio" class="activa">Resumen</button>
+      <button role="tab" data-seccion="catalogo">Catálogo</button>
+      <button role="tab" data-seccion="suscriptores">Suscriptores</button>
+      <button role="tab" data-seccion="publicidad">Publicidad</button>
+      <button role="tab" data-seccion="planes">Planes y pagos</button>
+    </nav>
+
+    <!-- Resumen del negocio -->
+    <div class="seccion" id="seccion-negocio">
+      <div class="aviso-prueba" id="negocio-prueba" hidden>
+        <b>Modo prueba:</b> los pagos se simulan y no se cobra nada. Para cobrar con Mercado Pago, configurá
+        <code>MP_ACCESS_TOKEN</code> (y opcionalmente <code>MP_WEBHOOK_SECRET</code>) antes de arrancar Cinetream. Ver «Planes y pagos».
+      </div>
+      <section class="resumen" id="negocio-datos" aria-label="Indicadores"></section>
+      <section class="tarjeta-panel">
+        <h2>Suscriptores por plan</h2>
+        <div class="barras" id="negocio-planes"></div>
+      </section>
+    </div>
+
+    <!-- Catálogo -->
+    <div class="seccion" id="seccion-catalogo" hidden>
+
+    <section class="resumen" id="resumen" aria-label="Resumen del catálogo"></section>
+
+    <section class="tarjeta-panel">
+      <div class="pestanas-admin" role="tablist">
+        <button role="tab" class="activa" data-pestana="link" aria-selected="true">Agregar con un link</button>
+        <button role="tab" data-pestana="archivo" aria-selected="false">Subir un archivo</button>
+      </div>
+
+      <div class="pestana-cuerpo" id="pestana-link">
+        <p class="nota">Pegá el link de una película de <b>Internet Archive</b> (archive.org/details/…), el link directo a un
+          archivo de video (.mp4, .webm) o una página que publique su video. Cinetream trae la película, la información y la portada.
+          No se puede importar desde YouTube ni otras plataformas de streaming.</p>
+        <form class="buscar-link" id="link-form">
+          <input id="link-url" type="url" placeholder="https://archive.org/details/nosferatu" required>
+          <button class="btn principal" id="link-buscar">Buscar</button>
+        </form>
+        <p class="error" id="link-error" role="alert"></p>
+        <form class="alta" id="link-alta" hidden>
+          <div class="alta-vista"><div id="link-portada" class="alta-portada"></div><p class="nota" id="link-detalle"></p></div>
+          <div class="alta-campos" id="link-campos"></div>
+          <fieldset class="modo">
+            <legend>¿Cómo se ve la película?</legend>
+            <label><input type="radio" name="modo" value="descargar" checked> <span><b>Descargarla a esta PC</b> (recomendado): se ve aunque el link deje de funcionar y carga más rápido en la red de tu casa.</span></label>
+            <label><input type="radio" name="modo" value="link"> <span><b>Reproducir desde el link</b>: no ocupa espacio, pero depende de que el sitio siga online.</span></label>
+          </fieldset>
+          <label class="derechos"><input type="checkbox" id="link-derechos"> <span>Tengo derecho a publicar esta película (es de dominio público, tiene una licencia que lo permite o tengo los derechos).</span></label>
+          <div class="acciones">
+            <button class="btn principal">Agregar al catálogo</button>
+            <button type="button" class="btn" id="link-cancelar">Cancelar</button>
+          </div>
+          <p class="error" id="link-alta-error" role="alert"></p>
+        </form>
+      </div>
+
+      <div class="pestana-cuerpo" id="pestana-archivo" hidden>
+        <p class="nota">Subí un archivo de video desde esta PC. MP4 con video H.264 y audio AAC es el formato que reproducen todas las
+          teles y celulares. Después podés tomar la portada de un cuadro del video.</p>
+        <form class="alta" id="archivo-alta">
+          <label class="soltar" id="archivo-soltar">
+            <input type="file" id="archivo-video" accept="video/mp4,video/webm,video/quicktime,video/x-m4v">
+            <span id="archivo-nombre"><b>Elegí el archivo</b> o arrastralo acá</span>
+          </label>
+          <div class="alta-campos" id="archivo-campos"></div>
+          <label class="derechos"><input type="checkbox" id="archivo-derechos"> <span>Tengo derecho a publicar esta película (es de dominio público, tiene una licencia que lo permite o tengo los derechos).</span></label>
+          <div class="progreso-subida" id="archivo-progreso" hidden><i></i><span></span></div>
+          <div class="acciones"><button class="btn principal" id="archivo-boton">Subir y agregar</button></div>
+          <p class="error" id="archivo-error" role="alert"></p>
+        </form>
+      </div>
+    </section>
+
+    <section class="tarjeta-panel">
+      <div class="catalogo-cabecera">
+        <h2>Catálogo</h2>
+        <input id="filtro-texto" type="search" placeholder="Buscar en el catálogo" aria-label="Buscar en el catálogo">
+        <select id="filtro-estado" aria-label="Filtrar por estado">
+          <option value="">Todas</option>
+          <option value="publicada">Publicadas</option>
+          <option value="oculta">Ocultas</option>
+          <option value="descargando">Descargando</option>
+          <option value="error">Con error</option>
+        </select>
+      </div>
+      <ul class="catalogo-lista" id="catalogo"></ul>
+    </section>
+    </div>
+
+    <!-- Suscriptores -->
+    <div class="seccion" id="seccion-suscriptores" hidden>
+      <section class="tarjeta-panel">
+        <div class="catalogo-cabecera">
+          <h2>Suscriptores</h2>
+          <input id="cuentas-filtro" type="search" placeholder="Buscar por correo o nombre" aria-label="Buscar suscriptores">
+          <select id="cuentas-plan" aria-label="Filtrar por plan"><option value="">Todos los planes</option></select>
+        </div>
+        <p class="nota">Desde acá podés dar o quitar un plan a mano (por ejemplo, si alguien pagó por transferencia o para una cortesía).</p>
+        <div class="tabla-envoltura"><table class="tabla-admin" id="cuentas-tabla"></table></div>
+      </section>
+    </div>
+
+    <!-- Publicidad -->
+    <div class="seccion" id="seccion-publicidad" hidden>
+      <section class="resumen" id="publicidad-datos" aria-label="Resultados de la publicidad"></section>
+      <section class="tarjeta-panel">
+        <div class="catalogo-cabecera">
+          <h2>Campañas</h2>
+          <button class="btn principal" id="campana-nueva">＋ Nueva campaña</button>
+        </div>
+        <p class="nota">La publicidad se muestra solo en el plan Gratis y nunca en perfiles infantiles. «Antes de la película» se puede saltar
+          después de los segundos que elijas; el «banner» aparece en el inicio.</p>
+        <ul class="campanas" id="campanas"></ul>
+      </section>
+    </div>
+
+    <!-- Planes y pagos -->
+    <div class="seccion" id="seccion-planes" hidden>
+      <section class="tarjeta-panel">
+        <h2>Planes y precios</h2>
+        <p class="nota">Los precios son en pesos. Los beneficios de cada plan son fijos: Gratis tiene publicidad; Plus y Plus anual no la tienen y
+          ven los títulos marcados como Plus. Un cambio de precio vale para las suscripciones nuevas.</p>
+        <form id="planes-form" class="planes-admin"></form>
+      </section>
+      <section class="tarjeta-panel">
+        <h2>Cobros con Mercado Pago</h2>
+        <div id="pagos-estado"></div>
+        <ol class="pasos-pago">
+          <li>Creá una aplicación en <b>Mercado Pago Developers</b> (Tus integraciones) y copiá el <b>Access Token</b> de producción.</li>
+          <li>Arrancá Cinetream con <code>MP_ACCESS_TOKEN=tu_token</code> (en Windows, agregalo en <code>Ver-Cinetream.bat</code> con <code>set MP_ACCESS_TOKEN=…</code>).</li>
+          <li>En la aplicación de Mercado Pago, configurá las notificaciones (webhooks) del tema <b>Suscripciones</b> hacia <code>https://tu-dominio/api/pagos/mercadopago</code> y copiá la clave secreta en <code>MP_WEBHOOK_SECRET</code>.</li>
+          <li>Para cobrar, Cinetream tiene que estar publicado en internet con HTTPS (un servidor o un servicio de hosting), no solo en la red de tu casa.</li>
+        </ol>
+      </section>
+    </div>
+  </div>
+
+  <dialog class="editor" id="campana-editor">
+    <form class="editor-form" id="campana-form">
+      <div class="editor-cabecera"><h2 id="campana-titulo">Nueva campaña</h2><button type="button" class="btn contorno" id="campana-cerrar" aria-label="Cerrar">✕</button></div>
+      <div class="editor-cuerpo">
+        <div class="editor-portada">
+          <div class="campana-vista" id="campana-vista"></div>
+          <div class="editor-portada-botones" id="campana-pieza-botones">
+            <label class="btn">Subir imagen o video<input type="file" id="campana-pieza" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" hidden></label>
+            <button type="button" class="btn" id="campana-quitar-pieza">Usar aviso de texto</button>
+          </div>
+          <p class="nota" id="campana-pieza-nota">Sin imagen ni video, se muestra un aviso de texto con los colores de la campaña.</p>
+          <div class="editor-colores">
+            <label>Fondo <input type="color" name="color0"></label>
+            <label>Acento <input type="color" name="color1"></label>
+          </div>
+        </div>
+        <div class="alta-campos">
+          <label class="ancho">Nombre interno<input name="nombre" required maxlength="80" placeholder="Ej.: Pizzería del centro · noviembre"></label>
+          <label>Anunciante<input name="anunciante" maxlength="80"></label>
+          <label>Formato<select name="tipo"><option value="previo">Antes de la película</option><option value="banner">Banner en el inicio</option></select></label>
+          <label class="ancho">Título del aviso<input name="titulo" maxlength="80"></label>
+          <label class="ancho">Texto<input name="texto" maxlength="200"></label>
+          <label class="ancho">Link (opcional)<input name="enlace" type="url" maxlength="500" placeholder="https://"></label>
+          <label>Duración (s, avisos con imagen o texto)<input name="duracion" type="number" min="3" max="60"></label>
+          <label>Se puede saltar a los (s)<input name="saltarTras" type="number" min="0" max="30"></label>
+          <label>Peso (1 a 10: cuántas veces sale frente a otras)<input name="peso" type="number" min="1" max="10"></label>
+          <label>Desde<input name="desde" type="date"></label>
+          <label>Hasta<input name="hasta" type="date"></label>
+          <label class="tilde"><input type="checkbox" name="activa"> Activa</label>
+        </div>
+      </div>
+      <div class="acciones"><button class="btn principal">Guardar campaña</button><button type="button" class="btn" id="campana-cancelar">Cancelar</button></div>
+      <p class="error" id="campana-error" role="alert"></p>
+    </form>
+  </dialog>
+
+  <dialog class="editor" id="editor">
+    <form method="dialog" class="editor-form" id="editor-form">
+      <div class="editor-cabecera"><h2>Editar película</h2><button type="button" class="btn contorno" id="editor-cerrar" aria-label="Cerrar">✕</button></div>
+      <div class="editor-cuerpo">
+        <div class="editor-portada">
+          <div id="editor-afiche"></div>
+          <div class="editor-portada-botones">
+            <label class="btn">Subir imagen<input type="file" id="editor-imagen" accept="image/jpeg,image/png,image/webp" hidden></label>
+            <button type="button" class="btn" id="editor-cuadro">Tomar un cuadro del video</button>
+            <button type="button" class="btn" id="editor-ilustracion">Usar ilustración</button>
+          </div>
+          <div class="editor-colores">
+            <label>Fondo <input type="color" id="editor-color-fondo"></label>
+            <label>Acento <input type="color" id="editor-color-acento"></label>
+            <label>Figura
+              <select id="editor-motivo">
+                <option>sol</option><option>luna</option><option>grilla</option><option>engranaje</option><option>montanas</option>
+                <option>ondas</option><option>anillos</option><option>triangulo</option><option>rayos</option><option>sombra</option><option>angulos</option>
+              </select>
+            </label>
+          </div>
+          <p class="nota" id="editor-video"></p>
+        </div>
+        <div class="alta-campos" id="editor-campos"></div>
+      </div>
+      <div class="acciones"><button class="btn principal" id="editor-guardar">Guardar cambios</button><button type="button" class="btn" id="editor-cancelar">Cancelar</button></div>
+      <p class="error" id="editor-error" role="alert"></p>
+    </form>
+  </dialog>
+
+  <div class="aviso-flotante" id="aviso" role="status" hidden></div>
+  <script type="module" src="admin.js"></script>
+</body>
+</html>

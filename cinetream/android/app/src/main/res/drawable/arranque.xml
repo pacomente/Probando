@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pantalla de arranque: fondo oscuro con el logo al centro mientras carga la plataforma -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/fondo" />
+    <item android:drawable="@drawable/logo" android:gravity="center" android:width="120dp" android:height="120dp" />
+</layer-list>

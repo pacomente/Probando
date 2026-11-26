@@ -1,0 +1,2 @@
+Acá van los APK de la app para Android: cinetream-celular.apk y cinetream-tele.apk.
+Se generan con android/compilar.sh (o se bajan de las Releases de GitHub) y se ofrecen en http://tu-servidor:3500/descargar.html

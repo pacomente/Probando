@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trappi Tecnología · Ingreso</title>
+  <meta name="theme-color" content="#0b1d2e">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
+  <style>
+    :root { --fondo: #0b1d2e; --panel: #10263b; --panel-2: #163352; --borde: #24496d; --texto: #e6f0fa; --suave: #8fb0cc; --acento: #3fb6ff; --peligro: #ff4d4f; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      color: var(--texto);
+      background: radial-gradient(1200px 600px at 20% 0%, #163a5c 0%, var(--fondo) 60%) fixed, var(--fondo);
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    .caja { width: 100%; max-width: 380px; background: var(--panel); border: 1px solid var(--borde); border-radius: 16px; padding: 28px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4); }
+    .marca { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+    .marca img { width: 48px; height: 48px; border-radius: 12px; }
+    .marca b { font-size: 22px; font-weight: 900; letter-spacing: 0.14em; display: block; line-height: 1.1; }
+    .marca span { color: var(--suave); }
+    h1 { font-size: 16px; font-weight: 600; margin: 18px 0 16px; color: var(--suave); }
+    label { display: block; font-size: 13px; color: var(--suave); margin-bottom: 4px; }
+    input { width: 100%; font: inherit; color: var(--texto); background: var(--panel-2); border: 1px solid var(--borde); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; }
+    input:focus { outline: 2px solid var(--acento); border-color: transparent; }
+    button { width: 100%; font: inherit; font-weight: 700; padding: 11px; border: 0; border-radius: 10px; background: var(--acento); color: #04121f; cursor: pointer; }
+    button:disabled { opacity: 0.6; }
+    .error { color: var(--peligro); min-height: 22px; font-size: 14px; margin-top: 10px; }
+    .pie { font-size: 12px; color: var(--suave); margin-top: 18px; text-align: center; }
+  </style>
+</head>
+<body>
+  <form class="caja" id="ingreso">
+    <div class="marca">
+      <img src="icono.svg" alt="">
+      <div><b>TRAPPI</b><span>Tecnología</span></div>
+    </div>
+    <h1>Monitoreo de flota · Ingreso de oficina</h1>
+    <label for="usuario">Usuario</label>
+    <input id="usuario" name="usuario" autocomplete="username" required autofocus>
+    <label for="clave">Contraseña</label>
+    <input id="clave" name="clave" type="password" autocomplete="current-password" required>
+    <button id="entrar">Ingresar</button>
+    <div class="error" id="error" role="alert"></div>
+    <div class="pie">© Trappi Tecnología</div>
+  </form>
+  <script>
+    document.getElementById('ingreso').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const boton = document.getElementById('entrar');
+      const error = document.getElementById('error');
+      boton.disabled = true;
+      error.textContent = '';
+      try {
+        const r = await fetch('api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ usuario: document.getElementById('usuario').value.trim(), clave: document.getElementById('clave').value }),
+        });
+        const datos = await r.json();
+        if (r.ok) location.href = './';
+        else error.textContent = datos.error || 'No se pudo ingresar';
+      } catch {
+        error.textContent = 'Sin conexión con Trappi Central';
+      }
+      boton.disabled = false;
+    });
+  </script>
+</body>
+</html>

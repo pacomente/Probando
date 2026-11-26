@@ -1,0 +1,8 @@
+Carpeta de videos de Cinetream
+
+Poné acá los archivos de películas que tengas derecho a mostrar (MP4 con video H.264 y audio AAC es lo que
+reproducen todas las teles y celulares). Después, en public/catalogo.js, poné en la película:
+
+    video: 'videos/nombre-del-archivo.mp4',
+
+Los archivos de esta carpeta no se suben al repositorio.

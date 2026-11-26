@@ -1,0 +1,15 @@
+{
+  "name": "cinetream",
+  "version": "0.1.0",
+  "description": "Cinetream: plataforma de películas para la tele y el celular.",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "private": true,
+  "license": "UNLICENSED"
+}

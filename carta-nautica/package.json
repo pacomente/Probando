@@ -1,0 +1,22 @@
+{
+  "name": "trappi-carta-nautica",
+  "version": "0.1.0",
+  "description": "Trappi Tecnología: carta náutica y monitoreo de flota pesquera en tiempo real (a bordo y central).",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "central": "node central.js",
+    "dev": "node --watch server.js",
+    "demo": "node server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "UNLICENSED",
+  "author": "Trappi Tecnología",
+  "private": true,
+  "optionalDependencies": {
+    "serialport": "^13.0.0"
+  }
+}

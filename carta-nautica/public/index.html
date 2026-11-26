@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Trappi Tecnología · Carta Náutica</title>
+  <meta name="description" content="Trappi Tecnología: carta náutica y monitoreo de flota pesquera en tiempo real. Buques AIS, avisos de tormenta, emergencias y guía OMI. Funciona sin internet.">
+  <meta name="theme-color" content="#0b1d2e">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icono-192.png">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="barra">
+    <div class="marca">
+      <img class="logo" src="icono.svg" alt="" width="34" height="34">
+      <div>
+        <h1><span class="marca-nombre">TRAPPI</span> <span class="marca-tec">Tecnología</span> <span id="titulo-producto" class="marca-producto">· Carta náutica</span></h1>
+        <div class="sub"><span id="modo" class="modo">Conectando…</span> <span id="conexion" class="conexion" hidden>SIN INTERNET</span> <span id="reloj"></span> <span id="sesion" class="sesion" hidden></span></div>
+      </div>
+    </div>
+    <nav class="acciones">
+      <button id="btn-mob" class="btn-mob" title="Hombre al agua: marca la posición ya">🆘<span> MOB</span></button>
+      <button id="btn-regla" title="Medir distancia y rumbo">📏<span> Regla</span></button>
+      <button id="btn-gps" title="Mostrar mi posición (GPS, funciona sin internet)">📍<span> Mi posición</span></button>
+      <button id="btn-avisos" title="Recibir avisos en el teléfono">🔔<span> Avisos</span></button>
+      <button id="btn-noche" title="Modo noche (luz roja, cuida la visión nocturna)">🌙<span> Noche</span></button>
+      <button id="btn-demo-sos" class="btn-alerta" title="Demostración: un barco envía hombre al agua" hidden>🧪<span> Simular SOS</span></button>
+      <button id="btn-salir" title="Cerrar sesión" hidden>⎋<span> Salir</span></button>
+      <button id="btn-panel" class="solo-movil" title="Panel">☰</button>
+    </nav>
+  </header>
+
+  <div id="alerta-emergencia" class="alerta-emergencia" hidden>
+    <span id="alerta-emergencia-texto"></span>
+    <button id="btn-silenciar">🔇 Silenciar 5 min</button>
+  </div>
+  <div id="alerta-tormenta" class="alerta-tormenta" hidden></div>
+
+  <main class="contenido">
+    <div id="mapa"></div>
+    <div id="coordenadas" class="coordenadas"></div>
+    <div id="regla-info" class="regla-info" hidden></div>
+    <section id="ficha" class="ficha" hidden></section>
+
+    <section id="mob" class="mob" hidden>
+      <h2>🆘 HOMBRE AL AGUA</h2>
+      <div class="mob-datos"></div>
+      <details>
+        <summary>Qué hacer ahora</summary>
+        <ol>
+          <li>Gritá <b>«¡Hombre al agua por estribor / babor!»</b> y que alguien <b>la señale sin perderla de vista</b> nunca.</li>
+          <li>Tirá el <b>aro salvavidas</b> con luz o boya, lo más cerca posible.</li>
+          <li>Maniobrá: <b>Williamson</b> (timón todo a la banda de la caída; con 60° de desvío, timón todo a la otra banda hasta el rumbo opuesto) o <b>curva única</b> si el buque gira rápido y la persona está a la vista.</li>
+          <li>Alertá: <b>botón DISTRESS del VHF</b> (DSC, «Man overboard») y <b>MAYDAY por canal 16</b>. Prefectura: <a href="tel:106">106</a>.</li>
+          <li>La persona <b>deriva con el viento y la corriente</b>: buscá corriente abajo de la marca.</li>
+          <li>Prepará la recuperación: escala, eslinga, ropa seca y atención por hipotermia.</li>
+        </ol>
+      </details>
+      <div class="botones">
+        <button id="mob-mayday">📻 Mensaje MAYDAY</button>
+        <button id="mob-fin">✓ Recuperada</button>
+      </div>
+    </section>
+
+    <aside id="panel" class="panel">
+      <div class="pestanas" role="tablist">
+        <button class="activa" data-pestana="buques">🚢 Buques <b id="cuenta-buques">0</b></button>
+        <button data-pestana="tiempo">🌬 Tiempo</button>
+        <button data-pestana="mareas">🌊 Marea</button>
+        <button data-pestana="alertas">⚠ Alertas <b id="cuenta-alertas">0</b></button>
+        <button data-pestana="sos" class="pestana-sos">🆘 OMI</button>
+      </div>
+
+      <div class="vista activa" id="vista-buques">
+        <div id="resumen-flota" class="resumen-flota" hidden></div>
+        <div class="filtros">
+          <input id="buscar" type="search" placeholder="Buscar nombre o MMSI…">
+          <select id="filtro-tipo">
+            <option value="">Todos</option>
+            <option value="emergencia">Emergencias</option>
+            <option value="flota">Flota de la empresa</option>
+            <option value="carga">Carga</option>
+            <option value="tanquero">Tanqueros</option>
+            <option value="pasajeros">Pasajeros</option>
+            <option value="pesca">Pesca</option>
+            <option value="servicio">Prácticos / autoridad / remolque</option>
+            <option value="recreo">Recreo / vela</option>
+            <option value="otro">Otros</option>
+          </select>
+        </div>
+        <label class="check"><input type="checkbox" id="ver-vectores" checked> Vectores de 6 min</label>
+        <label class="check"><input type="checkbox" id="ver-estelas" checked> Estelas</label>
+        <ul id="lista-buques" class="lista"></ul>
+        <div id="leyenda" class="leyenda"></div>
+      </div>
+
+      <div class="vista" id="vista-tiempo">
+        <p id="tiempo-origen" class="nota-alerta" hidden></p>
+        <p id="tiempo-lugar" class="nota"></p>
+        <div id="tiempo-actual" class="tarjetas"><p class="nota">Cargando pronóstico…</p></div>
+        <h3>Próximas 48 horas</h3>
+        <div class="tabla-scroll"><table id="tabla-pronostico" class="tabla"></table></div>
+        <p class="nota">Pronóstico de Open-Meteo para la ría. Confirmá siempre con el
+          <a href="https://www.smn.gob.ar/" target="_blank" rel="noopener">SMN</a> y los radioavisos de Prefectura.</p>
+      </div>
+
+      <div class="vista" id="vista-mareas">
+        <p id="marea-lugar" class="nota"></p>
+        <div id="mareas-resumen" class="tarjetas"></div>
+        <div id="grafico-marea" class="grafico"></div>
+        <p class="nota">Altura del mar sobre el nivel medio según un modelo global de baja resolución. En rías, golfos y
+          puertos la marea real puede ser bastante mayor y llegar a otra hora: para navegar usá las
+          <a href="https://www.hidro.gov.ar/oceanografia/tmareas/form_tmareas.asp" target="_blank" rel="noopener">tablas de marea del SHN</a>.</p>
+      </div>
+
+      <div class="vista" id="vista-alertas">
+        <label class="fila">Alertar abordaje si CPA menor a
+          <select id="umbral-cpa">
+            <option value="0.2">0,2 MN</option>
+            <option value="0.5" selected>0,5 MN</option>
+            <option value="1">1 MN</option>
+          </select>
+          en menos de 20 min
+        </label>
+        <ul id="lista-alertas" class="lista alertas"></ul>
+        <h3>Estado de los datos</h3>
+        <div id="estado-datos" class="estado-datos"></div>
+        <h3>Usar sin internet</h3>
+        <p class="nota">La carta, la guía OMI, el GPS, el MOB y el último pronóstico funcionan sin conexión.
+          El mapa guarda las zonas que mirás; antes de salir recorré la ría con internet, o guardá la zona visible:</p>
+        <button id="btn-guardar-zona">💾 Guardar la zona visible</button>
+        <p id="guardar-zona-estado" class="nota"></p>
+        <p class="nota">Sin internet, los buques solo se ven con un <b>receptor AIS a bordo</b> conectado al servidor (ver README).</p>
+      </div>
+
+      <div class="vista" id="vista-sos">
+        <div class="sos-llamar">
+          <a class="btn-llamar" href="tel:106">📞 Prefectura <b>106</b></a>
+          <div class="sos-canal">VHF <b>canal 16</b> · DSC <b>canal 70</b></div>
+        </div>
+
+        <h3>Mensaje de socorro listo para leer</h3>
+        <ol class="pasos">
+          <li>Si tenés VHF con DSC: levantá la tapa del botón <b>DISTRESS</b> y mantenelo apretado 5 s. Envía tu MMSI y posición GPS.</li>
+          <li>Esperá unos segundos y leé este mensaje por el <b>canal 16</b>, despacio y claro.</li>
+          <li>Si nadie responde, repetí la alerta y el mensaje.</li>
+        </ol>
+        <div class="sos-tipos">
+          <label><input type="radio" name="sos-tipo" value="mayday" checked> <b>MAYDAY</b> <span>socorro: peligro grave e inminente</span></label>
+          <label><input type="radio" name="sos-tipo" value="panpan"> <b>PAN-PAN</b> <span>urgencia: seguridad del buque o de una persona</span></label>
+          <label><input type="radio" name="sos-tipo" value="securite"> <b>SÉCURITÉ</b> <span>seguridad: aviso a la navegación o meteorológico</span></label>
+        </div>
+        <div class="sos-form">
+          <input id="sos-nombre" placeholder="Nombre del buque" autocomplete="off">
+          <input id="sos-indicativo" placeholder="Indicativo (ej. LW1234)" autocomplete="off">
+          <input id="sos-mmsi" placeholder="MMSI" inputmode="numeric" autocomplete="off">
+          <input id="sos-personas" placeholder="Personas a bordo" inputmode="numeric" autocomplete="off">
+          <select id="sos-naturaleza">
+            <option value="incendio">Incendio / explosión</option>
+            <option value="inundacion">Vía de agua / inundación</option>
+            <option value="abordaje">Abordaje (colisión)</option>
+            <option value="varada">Varada</option>
+            <option value="escora">Escora, peligro de zozobra</option>
+            <option value="hundimiento">Hundimiento</option>
+            <option value="mob">Hombre al agua</option>
+            <option value="abandono">Abandono del buque</option>
+            <option value="sinGobierno">Sin gobierno, a la deriva</option>
+            <option value="medica">Emergencia médica</option>
+          </select>
+          <select id="sos-ayuda">
+            <option value="inmediata">Necesito asistencia inmediata</option>
+            <option value="remolque">Necesito remolque</option>
+            <option value="medica">Necesito evacuación médica</option>
+            <option value="ninguna">(no pedir ayuda)</option>
+          </select>
+          <textarea id="sos-extra" rows="2" placeholder="Otra información (ej. color del casco, balsa al agua, chalecos puestos)"></textarea>
+        </div>
+        <pre id="sos-mensaje" class="sos-mensaje"></pre>
+        <div class="botones-fila">
+          <button id="sos-copiar">📋 Copiar</button>
+          <button id="sos-enviar" class="btn-alerta" hidden>📡 Avisar a la oficina</button>
+        </div>
+        <p id="sos-enviar-estado" class="nota"></p>
+        <p class="nota">Si escuchás un MAYDAY: hacé silencio en el canal 16, anotá la posición y, si ninguna estación
+          costera responde, acusá recibo y ayudá. Para deletrear usá el alfabeto fonético (abajo).</p>
+
+        <h3>Guía OMI</h3>
+        <details>
+          <summary>📻 Canales y equipos del SMSSM (GMDSS)</summary>
+          <table class="tabla izq">
+            <tr><td><b>VHF 16</b> (156,800 MHz)</td><td>Socorro, urgencia y seguridad por voz; llamada general</td></tr>
+            <tr><td><b>VHF 70</b> (156,525 MHz)</td><td>Llamada selectiva digital (DSC). Solo datos, nunca voz</td></tr>
+            <tr><td><b>VHF 13</b></td><td>Seguridad de la navegación, de puente a puente</td></tr>
+            <tr><td><b>VHF 06</b></td><td>Entre buques y coordinación SAR en el lugar</td></tr>
+            <tr><td><b>MF 2182 kHz</b></td><td>Socorro por voz en onda media</td></tr>
+            <tr><td><b>MF 2187,5 kHz</b></td><td>DSC de socorro en onda media</td></tr>
+            <tr><td><b>EPIRB 406 MHz</b></td><td>Radiobaliza vía satélite (COSPAS-SARSAT); 121,5 MHz para el rastreo final</td></tr>
+            <tr><td><b>SART</b></td><td>Respondedor radar (12 puntos en la pantalla) o AIS-SART (MMSI 970…)</td></tr>
+            <tr><td><b>NAVTEX</b></td><td>518 kHz en inglés y 490 kHz en idioma local: avisos y pronósticos</td></tr>
+            <tr><td><b>NAVAREA VI</b></td><td>Zona del Atlántico Sudoccidental, coordinada por Argentina</td></tr>
+          </table>
+        </details>
+        <details>
+          <summary>🚨 Señales de socorro (RIPA, Anexo IV)</summary>
+          <ul>
+            <li>Bengalas de mano o cohetes con paracaídas de <b>luz roja</b>; cohetes con estrellas rojas, uno por vez a intervalos cortos.</li>
+            <li>Señal fumígena de <b>humo naranja</b>.</li>
+            <li>Subir y bajar lenta y repetidamente los <b>brazos extendidos</b> a los costados.</li>
+            <li>La palabra <b>MAYDAY</b> por radiotelefonía; alerta <b>DSC</b> de socorro.</li>
+            <li><b>SOS</b> (· · · — — — · · ·) por luz, sonido o cualquier medio.</li>
+            <li>Sonido continuo con cualquier aparato de señales de niebla.</li>
+            <li>Disparos de cañón u otra señal explosiva a intervalos de un minuto aproximadamente.</li>
+            <li>Banderas <b>N sobre C</b> del Código Internacional de Señales.</li>
+            <li>Una bandera cuadra con una bola o algo parecido por encima o por debajo.</li>
+            <li>Llamas a bordo (por ejemplo, un barril de alquitrán o de aceite ardiendo).</li>
+            <li>Señales de una radiobaliza (EPIRB) o de un respondedor (SART).</li>
+          </ul>
+        </details>
+        <details>
+          <summary>⚓ Reglas de rumbo y gobierno (RIPA / COLREG)</summary>
+          <ul>
+            <li><b>Regla 5 · Vigilancia:</b> vista y oído permanentes, y todos los medios disponibles.</li>
+            <li><b>Regla 6 · Velocidad de seguridad:</b> poder parar y maniobrar a tiempo según visibilidad, tráfico y calado.</li>
+            <li><b>Regla 7 · Riesgo de abordaje:</b> si la <b>marcación de un buque no cambia</b> apreciablemente mientras se acerca, hay riesgo. En la carta se ve como CPA chico.</li>
+            <li><b>Regla 8 · Maniobra:</b> con tiempo, franca y bien visible. Cambios de rumbo o velocidad grandes, no una serie de cambios pequeños.</li>
+            <li><b>Regla 9 · Canales angostos</b> (como el Canal Principal): navegar lo más cerca posible del límite de estribor. Buques de menos de 20 m y veleros no deben estorbar a los que solo pueden navegar dentro del canal.</li>
+            <li><b>Regla 13 · Alcance:</b> el que alcanza (viniendo desde más de 22,5° a popa del través) se mantiene apartado.</li>
+            <li><b>Regla 14 · Vuelta encontrada:</b> rumbos opuestos, los dos caen a estribor y se cruzan babor con babor.</li>
+            <li><b>Regla 15 · Cruce:</b> cede el que tiene al otro <b>por su estribor</b>, y evita cruzarle la proa.</li>
+            <li><b>Regla 16 / 17:</b> el que cede maniobra pronto y claro; el otro mantiene rumbo y velocidad, pero maniobra si ve que el abordaje es inminente.</li>
+            <li><b>Regla 18 · Jerarquía:</b> el buque de motor se aparta de los que están sin gobierno, con maniobra restringida, pescando y a vela. El velero se aparta de los tres primeros. El pesquero, de los dos primeros. Todos, salvo los que están sin gobierno o con maniobra restringida, evitan estorbar al buque restringido por su calado.</li>
+            <li><b>Regla 34 · Pitadas de maniobra:</b> 1 corta = caigo a estribor · 2 cortas = caigo a babor · 3 cortas = estoy dando atrás · 5 o más cortas = no entiendo su maniobra / duda.</li>
+          </ul>
+        </details>
+        <details>
+          <summary>🌫 Señales fónicas con visibilidad reducida (Regla 35)</summary>
+          <ul>
+            <li>Motor, con arrancada: <b>1 larga</b> cada 2 min como máximo.</li>
+            <li>Motor, parado y sin arrancada: <b>2 largas</b> cada 2 min.</li>
+            <li>Sin gobierno, maniobra restringida, restringido por calado, vela, pesca, remolcando o empujando: <b>1 larga y 2 cortas</b> cada 2 min.</li>
+            <li>Buque remolcado (el último, si lleva tripulación): <b>1 larga y 3 cortas</b>.</li>
+            <li>Fondeado: <b>campana rápida 5 s</b> cada minuto (de 100 m o más, también gong a popa).</li>
+            <li>Menos de 12 m: no está obligado, pero debe hacer otra señal eficaz cada 2 min.</li>
+          </ul>
+        </details>
+        <details>
+          <summary>🔴🟢 Balizamiento IALA región B (Argentina)</summary>
+          <ul>
+            <li><b>Entrando a puerto: rojo a estribor, verde a babor.</b> Rojas cónicas, verdes cilíndricas.</li>
+            <li>Cardinal <b>N</b>: dos conos hacia arriba, negro sobre amarillo. Pasar por el norte.</li>
+            <li>Cardinal <b>S</b>: dos conos hacia abajo, amarillo sobre negro. Pasar por el sur.</li>
+            <li>Cardinal <b>E</b>: conos base con base (rombo), negro-amarillo-negro. Pasar por el este.</li>
+            <li>Cardinal <b>O</b>: conos punta con punta, amarillo-negro-amarillo. Pasar por el oeste.</li>
+            <li><b>Peligro aislado</b>: negra con franjas rojas, dos esferas negras.</li>
+            <li><b>Aguas navegables</b>: franjas verticales rojas y blancas, esfera roja.</li>
+            <li><b>Marca especial</b>: amarilla, con aspa amarilla.</li>
+          </ul>
+        </details>
+        <details>
+          <summary>🔤 Alfabeto fonético internacional</summary>
+          <p class="fonetico">Alfa · Bravo · Charlie · Delta · Echo · Foxtrot · Golf · Hotel · India · Juliett · Kilo · Lima · Mike ·
+            November · Oscar · Papa · Quebec · Romeo · Sierra · Tango · Uniform · Victor · Whiskey · X-ray · Yankee · Zulu</p>
+        </details>
+        <details>
+          <summary>💨 Escala Beaufort</summary>
+          <table class="tabla" id="tabla-beaufort"></table>
+        </details>
+        <p class="nota">Resumen de estudio basado en convenios de la OMI (RIPA/COLREG 72, SOLAS, SMSSM y SMCP).
+          No reemplaza los textos oficiales ni las normas de Prefectura Naval Argentina.</p>
+      </div>
+
+      <footer class="aviso-legal">
+        <b>© Trappi Tecnología</b> · Sistema de apoyo y monitoreo de flota. <b>No reemplaza</b> las cartas oficiales
+        del Servicio de Hidrografía Naval, los equipos de navegación del buque ni los avisos de Prefectura.
+        Posiciones de puertos y canal aproximadas.
+      </footer>
+    </aside>
+  </main>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

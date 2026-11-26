@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cinetream · Pago de prueba</title>
+  <meta name="theme-color" content="#0b0c11">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=Figtree:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body class="pagina-simple">
+  <main class="caja-simple">
+    <span class="logo"><span class="logo-marca">CINE</span><span class="logo-sub">TREAM</span></span>
+    <p class="banda-prueba">MODO PRUEBA · No se cobra nada</p>
+    <h1>Confirmar suscripción</h1>
+    <div class="resumen-pago" id="resumen">Cargando…</div>
+    <p>Cinetream todavía no está conectado a Mercado Pago, así que este pago se simula para probar el circuito completo.
+      Cuando el administrador configure Mercado Pago, en este paso se paga de verdad.</p>
+    <div class="acciones">
+      <button class="btn principal" id="aprobar">Simular pago aprobado</button>
+      <a class="btn" href="./?pago=cancelado">Cancelar</a>
+    </div>
+    <p class="error-cuenta" id="error" role="alert"></p>
+  </main>
+  <script type="module">
+    const $ = (s) => document.querySelector(s);
+    const ref = new URLSearchParams(location.search).get('ref') || '';
+    const planId = ref.split(':')[1];
+    fetch('api/planes').then((r) => r.json()).then(({ planes }) => {
+      const p = planes.find((x) => x.id === planId);
+      $('#resumen').innerHTML = p
+        ? `<b>Cinetream ${p.nombre}</b><span>$ ${p.precio.toLocaleString('es-AR')} por ${p.periodo}</span><small>${p.descripcion}</small>`
+        : 'Plan no encontrado.';
+    });
+    $('#aprobar').addEventListener('click', async () => {
+      $('#error').textContent = '';
+      const r = await fetch('api/pagos/prueba', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ref }) });
+      const datos = await r.json().catch(() => ({}));
+      if (r.ok) location.href = './?pago=ok';
+      else $('#error').textContent = datos.error || 'No se pudo completar.';
+    });
+  </script>
+</body>
+</html>

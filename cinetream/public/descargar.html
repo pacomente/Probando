@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cinetream · Descargar la app</title>
+  <meta name="theme-color" content="#0b0c11">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=Figtree:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body class="pagina-simple">
+  <main class="caja-simple caja-descargas">
+    <span class="logo"><span class="logo-marca">CINE</span><span class="logo-sub">TREAM</span></span>
+    <h1>La app para Android</h1>
+    <p>Instalala y Cinetream queda en el inicio del celular o de la tele, se abre directo y se maneja con el control remoto.</p>
+
+    <div class="descargas">
+      <article class="descarga" id="app-celular">
+        <span class="descarga-icono" aria-hidden="true">📱</span>
+        <h2>Celular y tablet</h2>
+        <p>Android 6 o más nuevo.</p>
+        <div class="descarga-accion"></div>
+      </article>
+      <article class="descarga" id="app-tele">
+        <span class="descarga-icono" aria-hidden="true">📺</span>
+        <h2>Tele</h2>
+        <p>Android TV, Google TV, Chromecast con Google TV, TCL, Philips, Sony, Mi TV Stick y TV Box.</p>
+        <div class="descarga-accion"></div>
+      </article>
+    </div>
+
+    <h2>Cómo instalarla</h2>
+    <ol class="pasos-instalar">
+      <li><b>En el celular:</b> tocá «Descargar», abrí el archivo y aceptá «Instalar apps de origen desconocido» la primera vez.</li>
+      <li><b>En la tele:</b> instalá la app gratuita <b>Downloader</b> desde Google Play de la tele, abrila y escribí la dirección
+        <code id="url-tele">—</code>. También podés pasar el archivo con un pendrive.</li>
+      <li>Al abrirla por primera vez tocá <b>Buscar en mi wifi</b>: encuentra sola esta PC. Si no, escribí <code id="url-servidor">—</code>.</li>
+    </ol>
+    <p class="nota-prueba"><a href="./">← Volver a Cinetream</a></p>
+  </main>
+  <script type="module">
+    const datos = await fetch('/api/descargas').then((r) => r.json()).catch(() => ({}));
+    const mb = (b) => `${(b / 1048576).toFixed(1).replace('.', ',')} MB`;
+    for (const tipo of ['celular', 'tele']) {
+      const app = datos[tipo];
+      document.querySelector(`#app-${tipo} .descarga-accion`).innerHTML = app
+        ? `<a class="btn principal" href="${app.url}" download>Descargar${app.tamano ? ` · ${mb(app.tamano)}` : ''}</a>`
+        : '<p class="nota-prueba">Todavía no está en este servidor. Copiá el APK en la carpeta <code>descargas</code> de Cinetream.</p>';
+    }
+    document.getElementById('url-tele').textContent = datos.tele && !datos.tele.tamano ? datos.tele.url.replace(/^https?:\/\//, '') : `${location.host}/descargas/cinetream-tele.apk`;
+    document.getElementById('url-servidor').textContent = location.host;
+  </script>
+</body>
+</html>

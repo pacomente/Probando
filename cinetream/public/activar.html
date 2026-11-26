@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cinetream · Activar la tele</title>
+  <meta name="theme-color" content="#0b0c11">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=Figtree:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body class="pagina-simple">
+  <main class="caja-simple">
+    <span class="logo"><span class="logo-marca">CINE</span><span class="logo-sub">TREAM</span></span>
+    <h1>Activar la tele</h1>
+
+    <form id="ingreso" class="form-simple" hidden>
+      <p>Primero ingresá a tu cuenta.</p>
+      <label for="email">Correo</label><input id="email" type="email" autocomplete="email" required>
+      <label for="clave">Contraseña</label><input id="clave" type="password" autocomplete="current-password" required>
+      <button class="btn principal">Ingresar</button>
+      <p class="nota-prueba">¿No tenés cuenta? <a href="./">Creala acá</a> y después volvé a esta página.</p>
+    </form>
+
+    <form id="vincular" class="form-simple" hidden>
+      <p>Escribí el código que muestra la tele.</p>
+      <label for="codigo">Código</label>
+      <input id="codigo" class="entrada-codigo" maxlength="6" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" required>
+      <button class="btn principal">Activar</button>
+    </form>
+
+    <div id="listo" hidden>
+      <p class="exito">✓ ¡Listo! La tele ya entró a tu cuenta.</p>
+      <a class="btn" href="./">Ir a Cinetream</a>
+    </div>
+    <p class="error-cuenta" id="error" role="alert"></p>
+  </main>
+  <script type="module">
+    const $ = (s) => document.querySelector(s);
+    const api = async (ruta, cuerpo) => {
+      const r = await fetch(`api/${ruta}`, cuerpo ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) } : {});
+      const datos = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(datos.error || 'No se pudo completar.');
+      return datos;
+    };
+    async function iniciar() {
+      const { cuenta } = await api('cuenta/yo');
+      $('#ingreso').hidden = Boolean(cuenta);
+      $('#vincular').hidden = !cuenta;
+      (cuenta ? $('#codigo') : $('#email')).focus();
+    }
+    $('#ingreso').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      $('#error').textContent = '';
+      try { await api('cuenta/entrar', { email: $('#email').value, clave: $('#clave').value }); iniciar(); } catch (err) { $('#error').textContent = err.message; }
+    });
+    $('#codigo').addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); });
+    $('#vincular').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      $('#error').textContent = '';
+      try {
+        await api('cuenta/tv/vincular', { codigo: $('#codigo').value });
+        $('#vincular').hidden = true;
+        $('#listo').hidden = false;
+      } catch (err) { $('#error').textContent = err.message; }
+    });
+    iniciar().catch(() => { $('#error').textContent = 'No se pudo conectar con Cinetream.'; });
+  </script>
+</body>
+</html>
