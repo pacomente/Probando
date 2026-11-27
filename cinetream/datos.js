@@ -1,36 +1,30 @@
-// Datos de Cinetream en el servidor: el catálogo (datos/catalogo.json) y la clave del administrador.
-// Se guardan de forma atómica (archivo temporal y renombrado) para no dejar un catálogo a medio escribir.
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { rename, writeFile } from 'node:fs/promises';
+// Datos de Cinetream en el servidor: el catálogo y la clave del administrador, en la base de datos (base.js).
+import { mkdirSync } from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PELICULAS } from './public/catalogo.js';
+import { CARPETA_DATOS, coleccion, documento } from './base.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const CARPETA_DATOS = process.env.CARPETA_DATOS || path.join(__dirname, 'datos');
+export { CARPETA_DATOS };
 export const CARPETA_VIDEOS = process.env.CARPETA_VIDEOS || path.join(__dirname, 'videos');
 export const CARPETA_PORTADAS = path.join(CARPETA_DATOS, 'portadas');
-const ARCHIVO_CATALOGO = path.join(CARPETA_DATOS, 'catalogo.json');
-const ARCHIVO_ADMIN = path.join(CARPETA_DATOS, 'admin.json');
-for (const c of [CARPETA_DATOS, CARPETA_VIDEOS, CARPETA_PORTADAS]) mkdirSync(c, { recursive: true });
+for (const c of [CARPETA_VIDEOS, CARPETA_PORTADAS]) mkdirSync(c, { recursive: true });
 
 // ---------- Catálogo ----------
-// La primera vez se arma con las películas de ejemplo de public/catalogo.js
-let catalogo = existsSync(ARCHIVO_CATALOGO)
-  ? JSON.parse(readFileSync(ARCHIVO_CATALOGO, 'utf8'))
-  : { peliculas: PELICULAS.map((p, i) => ({ ...p, estado: 'publicada', alta: Date.now() - (PELICULAS.length - i) * 60000 })) };
+// La primera vez se arma con las películas de ejemplo de public/catalogo.js (o con el catalogo.json de antes)
+const tablaPeliculas = coleccion('peliculas', {
+  indices: [{ campo: 'estado' }],
+  migrarDe: { archivo: 'catalogo.json', extraer: (c) => c.peliculas },
+  inicial: () => PELICULAS.map((p, i) => ({ ...p, estado: 'publicada', alta: Date.now() - (PELICULAS.length - i) * 60000 })),
+});
+const catalogo = { peliculas: [...tablaPeliculas.todos()] };
 
-let cola = Promise.resolve();
 export function guardarCatalogo() {
-  const copia = JSON.stringify(catalogo, null, 2);
-  cola = cola.then(async () => {
-    await writeFile(`${ARCHIVO_CATALOGO}.tmp`, copia);
-    await rename(`${ARCHIVO_CATALOGO}.tmp`, ARCHIVO_CATALOGO);
-  }).catch((e) => console.error('No se pudo guardar el catálogo:', e.message));
-  return cola;
+  try { tablaPeliculas.guardar(catalogo.peliculas); } catch (e) { console.error('No se pudo guardar el catálogo:', e.message); }
+  return Promise.resolve();
 }
-if (!existsSync(ARCHIVO_CATALOGO)) guardarCatalogo();
 
 export const todas = () => catalogo.peliculas;
 export const publicadas = () => catalogo.peliculas.filter((p) => p.estado === 'publicada');
@@ -100,7 +94,8 @@ function nuevoId(titulo) {
 }
 
 // ---------- Clave del administrador ----------
-let admin = existsSync(ARCHIVO_ADMIN) ? JSON.parse(readFileSync(ARCHIVO_ADMIN, 'utf8')) : null;
+const docAdmin = documento('admin', { migrarDe: { archivo: 'admin.json' } });
+let admin = docAdmin.leer();
 // En un servidor en internet (Render) la primera contraseña viene de la variable ADMIN_CLAVE
 if (!admin && process.env.ADMIN_CLAVE?.length >= 8) await definirClave(process.env.ADMIN_CLAVE);
 export const adminConfigurado = () => Boolean(admin);
@@ -108,7 +103,7 @@ export const adminConfigurado = () => Boolean(admin);
 export async function definirClave(clave) {
   const sal = crypto.randomBytes(16).toString('hex');
   admin = { sal, hash: crypto.scryptSync(clave, sal, 64).toString('hex') };
-  await writeFile(ARCHIVO_ADMIN, JSON.stringify(admin), { mode: 0o600 });
+  docAdmin.guardar(admin);
 }
 
 export function claveCorrecta(clave) {

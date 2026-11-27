@@ -1,12 +1,9 @@
-// Reproducciones por película y estado de los links externos (datos/estadisticas.json).
-import { existsSync, readFileSync } from 'node:fs';
-import { rename, writeFile } from 'node:fs/promises';
-import path from 'node:path';
-import { CARPETA_DATOS } from './datos.js';
+// Reproducciones por película y estado de los links externos (en la base de datos, documento «estadisticas»).
+import { documento } from './base.js';
 
-const ARCHIVO = path.join(CARPETA_DATOS, 'estadisticas.json');
 const DIA = 86400000;
-let datos = existsSync(ARCHIVO) ? JSON.parse(readFileSync(ARCHIVO, 'utf8')) : {};
+const doc = documento('estadisticas', { migrarDe: { archivo: 'estadisticas.json' }, inicial: () => ({}) });
+let datos = doc.leer();
 datos.vistas ||= {};   // id → { total, dias: { 'AAAA-MM-DD': n } }
 datos.enlaces ||= {};  // id → { ok, detalle, fecha }
 
@@ -15,10 +12,7 @@ function guardar() {
   if (pendiente) return;
   pendiente = setTimeout(async () => {
     pendiente = null;
-    try {
-      await writeFile(`${ARCHIVO}.tmp`, JSON.stringify(datos));
-      await rename(`${ARCHIVO}.tmp`, ARCHIVO);
-    } catch (e) { console.error('No se pudieron guardar las estadísticas:', e.message); }
+    try { doc.guardar(datos); } catch (e) { console.error('No se pudieron guardar las estadísticas:', e.message); }
   }, 3000);
 }
 

@@ -22,6 +22,13 @@ import {
   streamhgConfigurado, subidasPendientes, subirPorLink,
 } from './streamhg.js';
 import { resumenPantallas } from './pantallas.js';
+import { crearRestablecimiento } from './cuentas.js';
+import { correoConfigurado } from './correo.js';
+import { datosLegales, guardarLegales, legalCompleto, listaTramites, resolverTramite } from './legal.js';
+import { ARCHIVO_BASE, resumenBase } from './base.js';
+import {
+  borrarRespaldo, hacerRespaldo, listaRespaldos, prepararRestauracion, restauracionPendiente, rutaRespaldo,
+} from './respaldo.js';
 import { estadoEnlace, guardarEnlace, olvidarPelicula, revisarEnlace, vistas, vistasPorDia } from './estadisticas.js';
 
 const HORAS_SESION = 12;
@@ -267,6 +274,51 @@ export async function rutasAdmin(req, res, url) {
         r2: await datosR2(),
       });
     }
+
+    // ---------- Datos legales y trámites ----------
+    if (ruta === '/legal' && req.method === 'GET') return json(res, 200, { ...datosLegales(), completo: legalCompleto(), correo_envio: correoConfigurado() });
+    if (ruta === '/legal' && req.method === 'PUT') return json(res, 200, await guardarLegales((await leerJSON(req)).datos || {}));
+    if (ruta === '/tramites') return json(res, 200, { tramites: listaTramites() });
+    const mt = ruta.match(/^\/tramites\/([A-Z]-[0-9A-F]{8})\/resolver$/);
+    if (mt && req.method === 'POST') {
+      const t = await resolverTramite(mt[1]);
+      return t ? json(res, 200, { tramite: t }) : json(res, 404, { error: 'Ese trámite no existe.' });
+    }
+    // Link para crear una contraseña nueva (para mandarlo por WhatsApp si no hay correo configurado)
+    const mr = ruta.match(/^\/cuentas\/([a-f0-9]+)\/restablecer$/);
+    if (mr && req.method === 'POST') {
+      const cuenta = buscarCuenta(mr[1]);
+      if (!cuenta) return json(res, 404, { error: 'Esa cuenta no existe.' });
+      const base = direccionPublica(req) || `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host}`;
+      return json(res, 200, { link: `${base}/restablecer.html?token=${crearRestablecimiento(cuenta, 24)}`, vence: Date.now() + 24 * 3600000 });
+    }
+
+    // ---------- Base de datos y copias de seguridad ----------
+    if (ruta === '/base') {
+      const tam = (await stat(ARCHIVO_BASE).catch(() => ({ size: 0 }))).size;
+      return json(res, 200, { tablas: resumenBase(), tamano: tam, respaldos: listaRespaldos(), restauracionPendiente: restauracionPendiente() });
+    }
+    if (ruta === '/respaldos' && req.method === 'POST') return json(res, 200, { respaldo: hacerRespaldo({ manual: true }) });
+    if (ruta === '/respaldos/restaurar' && req.method === 'POST') {
+      const partes = [];
+      let total = 0;
+      for await (const parte of req) {
+        total += parte.length;
+        if (total > 1024 ** 3) return json(res, 413, { error: 'El archivo es demasiado grande.' });
+        partes.push(parte);
+      }
+      await prepararRestauracion(Buffer.concat(partes)); // valida que sea una copia de Cinetream
+      hacerRespaldo({ manual: true }); // por las dudas, una copia de lo que hay ahora (la restauración se aplica al reiniciar)
+      return json(res, 200, { ok: true });
+    }
+    const mrs = ruta.match(/^\/respaldos\/(cinetream-[\w-]+\.db)$/);
+    if (mrs && req.method === 'GET') {
+      const archivo = rutaRespaldo(mrs[1]);
+      if (!archivo) return json(res, 404, { error: 'Esa copia no existe.' });
+      res.writeHead(200, { 'Content-Type': 'application/vnd.sqlite3', 'Content-Disposition': `attachment; filename="${mrs[1]}"`, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+      return createReadStream(archivo).pipe(res);
+    }
+    if (mrs && req.method === 'DELETE') return json(res, 200, { ok: borrarRespaldo(mrs[1]) });
 
     // ---------- StreamHG (tu cuenta) ----------
     if (ruta.startsWith('/streamhg')) {

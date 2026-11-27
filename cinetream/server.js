@@ -17,6 +17,7 @@ import { CARPETA_PIEZAS } from './publicidad.js';
 import { modoPrueba } from './pagos.js';
 import { esLocal, ipCliente } from './red.js';
 import { registrarVista } from './estadisticas.js';
+import { programarRespaldos } from './respaldo.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3500;
@@ -110,7 +111,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(204, SEGURIDAD);
       return res.end();
     }
-    if (/^\/api\/(cuenta|planes|anuncios|pagos|pantallas)(\/|$)/.test(url.pathname)) return await rutasCuenta(req, res, url);
+    if (/^\/api\/(cuenta|planes|anuncios|pagos|pantallas|legal)(\/|$)/.test(url.pathname)) return await rutasCuenta(req, res, url);
     if (url.pathname.startsWith('/anuncios/')) {
       const archivo = dentroDe(CARPETA_PIEZAS, url.pathname.slice('/anuncios/'.length));
       if (!archivo) { res.writeHead(403, SEGURIDAD); return res.end(); }
@@ -175,6 +176,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+programarRespaldos();
 server.listen(PORT, HOST, () => {
   console.log(`🎬 Cinetream → http://localhost:${PORT}`);
   console.log(`   Administrador (desde esta PC) → http://localhost:${PORT}/admin.html`);

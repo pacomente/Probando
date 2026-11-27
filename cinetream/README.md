@@ -291,6 +291,38 @@ keytool -genkeypair -keystore cinetream.jks -alias cinetream -keyalg RSA -keysiz
 
 Al pasar de la clave de prueba a la tuya hay que desinstalar una vez la app vieja.
 
+## Base de datos y copias de seguridad
+
+Todo (cuentas, catálogo, planes, publicidad, trámites, estadísticas y configuración) está en una base de datos **SQLite**,
+`datos/cinetream.db`. Viene incluida en Node: no hay que instalar ni pagar nada aparte. Cada cuenta, película o campaña es una
+fila; el correo de las cuentas tiene un índice único. Al guardar solo se escribe lo que cambió, en una transacción.
+
+- **Si venís de una versión anterior,** al arrancar importa sola los `.json` de antes y los deja renombrados como `.migrado`.
+- **Copias automáticas:** una por día en `datos/respaldos/` (se guardan las últimas 14).
+- **Administrador → Ajustes → Base de datos:** ver el tamaño y las filas, **Hacer una copia ahora**, **Descargar** cualquier copia y
+  **Restaurar una copia** (se valida que sea de Cinetream y se aplica al reiniciar; antes se guarda la base actual).
+- Las copias incluyen las contraseñas cifradas: guardalas en un lugar seguro.
+
+## Cuentas: contraseña nueva
+
+- **«¿Olvidaste tu contraseña?»** en el ingreso manda un link por correo (vale 1 hora y sirve una vez). La respuesta es la misma
+  exista o no la cuenta, para no revelar qué correos están registrados.
+- Para los correos hace falta una cuenta gratis en <https://resend.com>: en Render cargá `RESEND_API_KEY` y `CORREO_REMITENTE`
+  (por ejemplo `Cinetream <no-responder@tudominio.com>`, con el dominio verificado en Resend).
+- **Sin correo configurado:** en **Suscriptores → Link contraseña** se genera un link de 24 horas para mandar por WhatsApp.
+- Al cambiar la contraseña se cierran las sesiones abiertas en los otros equipos.
+
+## Lo legal (Argentina)
+
+- **Términos y condiciones** y **Política de privacidad** (`legal.html`), con los datos del titular que se cargan en
+  **Ajustes → Datos legales** (titular, CUIT, domicilio, correo). Incluyen la leyenda de la AAIP de la Ley 25.326.
+  Son un modelo: conviene que los revise un abogado o tu contador.
+- **Botón de baja** (Res. 316/2018): la suscripción se da de baja en un paso, sigue hasta la fecha pagada y se entrega un código.
+- **Botón de arrepentimiento** (Res. 424/2020): dentro de los 10 días de contratado se cancela en el momento y queda un trámite
+  «Devolver $…» en **Suscriptores → Trámites** para hacer la devolución desde Mercado Pago y marcarlo como resuelto.
+- **Eliminar mi cuenta:** borra la cuenta y sus datos (con la contraseña como confirmación).
+- Los links están en la bienvenida, al pie del inicio y en Perfil → Ajustes.
+
 ## Ponerla en internet con Render
 
 Así Cinetream se ve desde cualquier lado (no solo en la wifi de tu casa), con https, y puede cobrar con Mercado Pago.
@@ -324,7 +356,7 @@ Esto es la plataforma (la parte que ve el público). Para venderla como servicio
 - **Hosting de video**: los videos se sirven desde un CDN o un servicio de video (por ejemplo Cloudflare Stream, Mux o
   Bunny Stream) con calidad adaptable (HLS), en lugar de archivos sueltos.
 - **Facturación** (AFIP) de las suscripciones y la publicidad.
-- **Base de datos** (por ejemplo PostgreSQL) si se pasa de unos miles de cuentas: hoy se guardan en `datos/cuentas.json`.
+- **PostgreSQL** si algún día hacen falta varios servidores a la vez (SQLite alcanza para un servidor con decenas de miles de cuentas).
 - **Apps de Samsung (Tizen) y LG (webOS)**: se arman empaquetando esta misma web con las herramientas de cada marca. La de Android TV ya está en `android/`.
 - **Google Play**: subir los APK (o un AAB, con `./gradlew bundleRelease`) firmados con tu clave propia.
 
@@ -337,6 +369,10 @@ Esto es la plataforma (la parte que ve el público). Para venderla como servicio
 | `importar.js` | Análisis de links (Internet Archive, archivo directo, página con video) y descargas. |
 | `datos.js` | Catálogo y contraseña guardados en `datos/`. |
 | `estadisticas.js` | Reproducciones por película y estado de los links. |
+| `base.js` | Base de datos SQLite: colecciones, documentos, migración de los .json viejos y copias. |
+| `respaldo.js` | Copias de seguridad diarias, descarga y restauración. |
+| `legal.js` · `correo.js` | Datos legales, trámites (baja, arrepentimiento, eliminación) y correos de contraseña nueva. |
+| `public/legal.html` · `tramites.html` · `restablecer.html` | Términos y privacidad; botones de baja y arrepentimiento; contraseña nueva. |
 | `pantallas.js` · `public/pantallas.js` | Límite de pantallas a la vez: pedir lugar, señal mientras se ve y cortar en otro equipo. |
 | `streamhg.js` | Tu cuenta de StreamHG: lista de videos, datos, subida por link y reproductor para insertar. |
 | `r2.js` | Videos en Cloudflare R2: firma de pedidos (compatible con S3), subidas por partes y links firmados. |

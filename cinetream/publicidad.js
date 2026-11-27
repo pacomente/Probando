@@ -1,12 +1,10 @@
 // Publicidad de Cinetream: campañas, sus piezas (imagen, video o texto) y las estadísticas.
 // Formatos: "previo" (antes de la película, se puede saltar) y "banner" (en el inicio).
 import crypto from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { rename, writeFile } from 'node:fs/promises';
+import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { CARPETA_DATOS } from './datos.js';
+import { CARPETA_DATOS, coleccion } from './base.js';
 
-const ARCHIVO = path.join(CARPETA_DATOS, 'publicidad.json');
 export const CARPETA_PIEZAS = path.join(CARPETA_DATOS, 'anuncios');
 mkdirSync(CARPETA_PIEZAS, { recursive: true });
 
@@ -26,18 +24,18 @@ const INICIALES = [
   },
 ];
 
-let datos = existsSync(ARCHIVO) ? JSON.parse(readFileSync(ARCHIVO, 'utf8')) : { campanas: INICIALES };
-let cola = Promise.resolve();
+// Una fila por campaña en la base de datos
+const tablaCampanas = coleccion('campanas', {
+  indices: [{ campo: 'activa' }],
+  migrarDe: { archivo: 'publicidad.json', extraer: (x) => x.campanas },
+  inicial: () => INICIALES,
+});
+let datos = { campanas: [...tablaCampanas.todos()] };
 let pendiente = null;
 function guardar() {
-  const copia = JSON.stringify(datos, null, 2);
-  cola = cola.then(async () => {
-    await writeFile(`${ARCHIVO}.tmp`, copia);
-    await rename(`${ARCHIVO}.tmp`, ARCHIVO);
-  }).catch((e) => console.error('No se pudo guardar la publicidad:', e.message));
-  return cola;
+  try { tablaCampanas.guardar(datos.campanas); } catch (e) { console.error('No se pudo guardar la publicidad:', e.message); }
+  return Promise.resolve();
 }
-if (!existsSync(ARCHIVO)) guardar();
 // Las estadísticas llegan seguido: se guardan como mucho cada 5 segundos
 const guardarLuego = () => { if (!pendiente) pendiente = setTimeout(() => { pendiente = null; guardar(); }, 5000); };
 

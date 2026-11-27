@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cinetream · Contraseña nueva</title>
+  <meta name="theme-color" content="#0b0c11">
+  <meta name="referrer" content="no-referrer">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=Figtree:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body class="pagina-simple">
+  <main class="caja-simple">
+    <span class="logo"><span class="logo-marca">CINE</span><span class="logo-sub">TREAM</span></span>
+    <h1>Contraseña nueva</h1>
+    <form id="form" class="form-simple">
+      <p>Elegí una contraseña nueva para tu cuenta. Al guardarla se cierra la sesión en los otros equipos.</p>
+      <label for="clave">Contraseña nueva (al menos 8 caracteres)</label>
+      <input id="clave" type="password" autocomplete="new-password" minlength="8" required>
+      <label for="repetir">Repetila</label>
+      <input id="repetir" type="password" autocomplete="new-password" minlength="8" required>
+      <button class="btn principal">Guardar y entrar</button>
+      <p class="error-cuenta" id="error" role="alert"></p>
+    </form>
+    <div id="listo" class="form-simple" hidden>
+      <p class="ok-cuenta">✓ Listo, ya tenés tu contraseña nueva.</p>
+      <a class="btn principal" href="./">Ir a Cinetream</a>
+    </div>
+  </main>
+  <script type="module">
+    const token = new URLSearchParams(location.search).get('token') || '';
+    // El link no queda en el historial ni se manda a otros sitios
+    history.replaceState(null, '', 'restablecer.html');
+    const error = document.getElementById('error');
+    if (!token) { error.textContent = 'Este link está incompleto. Pedí uno nuevo desde «¿Olvidaste tu contraseña?».'; }
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      error.textContent = '';
+      const clave = document.getElementById('clave').value;
+      if (clave.length < 8) { error.textContent = 'La contraseña tiene que tener al menos 8 caracteres.'; return; }
+      if (clave !== document.getElementById('repetir').value) { error.textContent = 'Las contraseñas no coinciden.'; return; }
+      const r = await fetch('/api/cuenta/restablecer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, clave }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { error.textContent = d.error || 'No se pudo guardar. Probá de nuevo.'; return; }
+      document.getElementById('form').hidden = true;
+      document.getElementById('listo').hidden = false;
+    });
+  </script>
+</body>
+</html>

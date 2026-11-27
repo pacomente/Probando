@@ -1,12 +1,14 @@
 // Rutas para el público: cuenta, planes, pagos, ingreso en la tele con un código y publicidad.
 import {
-  activarPlan, buscarCuenta, buscarPlan, cancelarPlan, cookieSesion, crearCuenta, crearToken, cuentaDe, datosPublicos,
+  activarPlan, buscarCuenta, buscarPorCorreo, crearRestablecimiento, eliminarCuenta, restablecerClave, buscarPlan, cancelarPlan, cookieSesion, crearCuenta, crearToken, cuentaDe, datosPublicos,
   estadoCodigo, guardarCuentas, listaPlanes, nuevoCodigoTV, planEfectivo, verificarCuenta, vincularCodigo,
 } from './cuentas.js';
 import { cancelarEnMercadoPago, consultarSuscripcion, crearSuscripcion, firmaValida, modoPrueba } from './pagos.js';
 import { campanasVigentes, registrarEvento } from './publicidad.js';
 import { ipCliente } from './red.js';
 import { cortar, empezar, latido, pantallasActivas, terminar } from './pantallas.js';
+import { correoConfigurado, correoRestablecer, enviarCorreo } from './correo.js';
+import { datosLegales, listaTramites, registrarTramite } from './legal.js';
 
 const DIA = 86400000;
 const fallos = new Map(); // ip → { n, desde }: freno a quien prueba contraseñas
@@ -68,6 +70,34 @@ export async function rutasCuenta(req, res, url) {
     }
     if (ruta === '/api/cuenta/salir' && req.method === 'POST') {
       return json(res, 200, { ok: true }, { 'Set-Cookie': cookieSesion(req, '', 0) });
+    }
+
+    // ---------- Olvidé mi contraseña ----------
+    if (ruta === '/api/cuenta/olvide' && req.method === 'POST') {
+      if (bloqueado(req)) return json(res, 429, { error: 'Demasiados intentos. Esperá 15 minutos.' });
+      fallo(req); // cuenta como intento: frena a quien prueba correos
+      const { email } = await leerJSON(req);
+      const cuenta = buscarPorCorreo(String(email || ''));
+      if (cuenta && correoConfigurado()) {
+        const link = `${base(req)}/restablecer.html?token=${crearRestablecimiento(cuenta, 1)}`;
+        const c = correoRestablecer({ nombre: cuenta.nombre, link });
+        enviarCorreo({ para: cuenta.email, asunto: c.asunto, html: c.html, texto: c.texto }).catch((e) => console.error('No se pudo mandar el correo:', e.message));
+      }
+      // Misma respuesta exista o no la cuenta: así no se puede averiguar qué correos están registrados
+      return json(res, 200, { ok: true, correo: correoConfigurado(), contacto: datosLegales().correo || null });
+    }
+    if (ruta === '/api/cuenta/restablecer' && req.method === 'POST') {
+      if (bloqueado(req)) return json(res, 429, { error: 'Demasiados intentos. Esperá 15 minutos.' });
+      const { token, clave } = await leerJSON(req);
+      let cuenta;
+      try { cuenta = restablecerClave(String(token || ''), clave); } catch (e) { fallo(req); throw e; }
+      return json(res, 200, { cuenta: datosPublicos(cuenta) }, { 'Set-Cookie': cookieSesion(req, crearToken(cuenta)) });
+    }
+
+    // ---------- Datos legales (Términos, Privacidad, Botón de baja) ----------
+    if (ruta === '/api/legal') {
+      const { actualizado, ...datos } = datosLegales();
+      return json(res, 200, { ...datos, actualizado });
     }
 
     // ---------- Ingresar en la tele con un código ----------
@@ -148,6 +178,37 @@ export async function rutasCuenta(req, res, url) {
     if (ruta === '/api/pantallas/latido' && req.method === 'POST') return json(res, 200, latido(cuenta, (await leerJSON(req, 2000)).dispositivo));
     if (ruta === '/api/pantallas/terminar' && req.method === 'POST') { terminar(cuenta, (await leerJSON(req, 2000)).dispositivo); return json(res, 200, { ok: true }); }
     if (ruta === '/api/pantallas/cortar' && req.method === 'POST') return json(res, 200, { ok: cortar(cuenta, (await leerJSON(req, 2000)).dispositivo) });
+
+    // ---------- Botón de baja, Botón de arrepentimiento y eliminar la cuenta ----------
+    if (ruta === '/api/cuenta/tramites') return json(res, 200, { tramites: listaTramites().filter((t) => t.cuentaId === cuenta.id) });
+    if (ruta === '/api/cuenta/baja' && req.method === 'POST') {
+      // Res. 316/2018: la baja tiene que ser tan simple como el alta. Se deja de renovar y queda constancia con un código.
+      const plan = planEfectivo(cuenta);
+      if (plan.id === 'gratis') return json(res, 400, { error: 'No tenés una suscripción paga para dar de baja.' });
+      await cancelarEnMercadoPago(cuenta.pago?.id).catch(() => {});
+      cancelarPlan(cuenta);
+      const t = registrarTramite('baja', cuenta, { plan: plan.nombre, hasta: cuenta.vence });
+      return json(res, 200, { codigo: t.codigo, cuenta: datosPublicos(cuenta) });
+    }
+    if (ruta === '/api/cuenta/arrepentimiento' && req.method === 'POST') {
+      // Res. 424/2020: dentro de los 10 días de contratado se puede revocar y pedir la devolución del dinero
+      const plan = planEfectivo(cuenta);
+      if (plan.id === 'gratis') return json(res, 400, { error: 'No tenés una suscripción paga contratada.' });
+      const dias = cuenta.contratado ? (Date.now() - cuenta.contratado) / DIA : Infinity;
+      if (dias > 10) return json(res, 400, { error: 'Pasaron más de 10 días desde que contrataste. Podés usar el Botón de baja: tu plan sigue hasta la fecha pagada y no se renueva.' });
+      await cancelarEnMercadoPago(cuenta.pago?.id).catch(() => {});
+      const t = registrarTramite('arrepentimiento', cuenta, { plan: plan.nombre, precio: plan.precio, contratado: cuenta.contratado, pago: cuenta.pago?.id || null });
+      activarPlan(cuenta, 'gratis');
+      return json(res, 200, { codigo: t.codigo, cuenta: datosPublicos(cuenta) });
+    }
+    if (ruta === '/api/cuenta/eliminar' && req.method === 'POST') {
+      const { clave } = await leerJSON(req);
+      if (!verificarCuenta(cuenta.email, clave)) { fallo(req); return json(res, 401, { error: 'La contraseña no es correcta.' }); }
+      await cancelarEnMercadoPago(cuenta.pago?.id).catch(() => {});
+      const t = registrarTramite('eliminacion', cuenta, { estado: 'resuelto' });
+      eliminarCuenta(cuenta);
+      return json(res, 200, { codigo: t.codigo }, { 'Set-Cookie': cookieSesion(req, '', 0) });
+    }
 
     if (ruta === '/api/cuenta/cancelar' && req.method === 'POST') {
       await cancelarEnMercadoPago(cuenta.pago?.id).catch(() => {});
