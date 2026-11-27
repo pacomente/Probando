@@ -3,7 +3,7 @@
 // Sin configurar, Cinetream funciona igual: el administrador puede generar el link y mandarlo por WhatsApp.
 export const correoConfigurado = () => Boolean(process.env.RESEND_API_KEY && process.env.CORREO_REMITENTE);
 
-export async function enviarCorreo({ para, asunto, html, texto }) {
+export async function enviarCorreo({ para, asunto, html, texto }: { para: string; asunto: string; html: string; texto: string }) {
   if (!correoConfigurado()) throw new Error('El envío de correos no está configurado.');
   const r = await fetch(process.env.RESEND_URL || 'https://api.resend.com/emails', {
     method: 'POST',
@@ -14,9 +14,10 @@ export async function enviarCorreo({ para, asunto, html, texto }) {
   if (!r.ok) throw new Error(`El servicio de correo respondió ${r.status}.`);
 }
 
-const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ENTIDADES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const esc = (t: unknown) => String(t ?? '').replace(/[&<>"']/g, (c) => ENTIDADES[c]);
 
-export function correoRestablecer({ nombre, link }) {
+export function correoRestablecer({ nombre, link }: { nombre?: string; link: string }) {
   const saludo = nombre ? `Hola, ${nombre}:` : 'Hola:';
   return {
     asunto: 'Cinetream · Creá una contraseña nueva',

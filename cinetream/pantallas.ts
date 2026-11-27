@@ -1,26 +1,29 @@
 // Límite de pantallas: cuántos equipos de una misma cuenta pueden ver películas al mismo tiempo.
 // Cada equipo que reproduce manda una señal cada 30 s; si deja de mandarla (se cerró, se cortó internet) deja de contar.
 // Se guarda en memoria: si el servidor se reinicia, las pantallas vuelven a anotarse solas con la próxima señal.
-import { planEfectivo, pantallasDe } from './cuentas.js';
+import { planEfectivo, pantallasDe } from './cuentas.ts';
+import type { Cuenta } from './tipos.ts';
+
+interface Pantalla { equipo: string; titulo: string; desde: number; ultimo: number; cortada: boolean }
 
 const VIVA = 75000;
-const activas = new Map(); // id de cuenta → Map(dispositivo → { equipo, titulo, desde, ultimo, cortada })
+const activas = new Map<string, Map<string, Pantalla>>(); // id de cuenta → equipos mirando
 
-function deCuenta(cuenta) {
-  if (!activas.has(cuenta.id)) activas.set(cuenta.id, new Map());
-  const mapa = activas.get(cuenta.id);
+function deCuenta(cuenta: Cuenta): Map<string, Pantalla> {
+  let mapa = activas.get(cuenta.id);
+  if (!mapa) { mapa = new Map(); activas.set(cuenta.id, mapa); }
   for (const [d, p] of mapa) if (Date.now() - p.ultimo > VIVA) mapa.delete(d);
   return mapa;
 }
-const publica = (dispositivo, p) => ({ dispositivo, equipo: p.equipo, titulo: p.titulo, desde: p.desde });
-const texto = (v, max) => String(v ?? '').trim().slice(0, max);
+const publica = (dispositivo: string, p: Pantalla) => ({ dispositivo, equipo: p.equipo, titulo: p.titulo, desde: p.desde });
+const texto = (v: unknown, max: number) => String(v ?? '').trim().slice(0, max);
 
-export function pantallasActivas(cuenta) {
+export function pantallasActivas(cuenta: Cuenta) {
   return [...deCuenta(cuenta)].filter(([, p]) => !p.cortada).map(([d, p]) => publica(d, p));
 }
 
 /** Pide permiso para empezar a ver en este equipo. */
-export function empezar(cuenta, { dispositivo, equipo, titulo }) {
+export function empezar(cuenta: Cuenta, { dispositivo, equipo, titulo }: Record<string, unknown>) {
   const id = texto(dispositivo, 64);
   if (!id) return { ok: false, error: 'Falta el identificador del equipo.' };
   const limite = pantallasDe(planEfectivo(cuenta));
@@ -33,7 +36,7 @@ export function empezar(cuenta, { dispositivo, equipo, titulo }) {
 }
 
 /** Señal de vida mientras se ve una película. Si el equipo fue cortado o ya no hay lugar, tiene que dejar de reproducir. */
-export function latido(cuenta, dispositivo) {
+export function latido(cuenta: Cuenta, dispositivo: unknown): { seguir: boolean; motivo?: string; volver?: boolean } {
   const mapa = deCuenta(cuenta);
   const p = mapa.get(String(dispositivo));
   if (p?.cortada) { mapa.delete(String(dispositivo)); return { seguir: false, motivo: 'cortada' }; }
@@ -43,10 +46,10 @@ export function latido(cuenta, dispositivo) {
   return otras < pantallasDe(planEfectivo(cuenta)) ? { seguir: true, volver: true } : { seguir: false, motivo: 'limite' };
 }
 
-export function terminar(cuenta, dispositivo) { deCuenta(cuenta).delete(String(dispositivo)); }
+export function terminar(cuenta: Cuenta, dispositivo: unknown) { deCuenta(cuenta).delete(String(dispositivo)); }
 
 /** Corta la reproducción en otro equipo de la misma cuenta (deja de contar enseguida). */
-export function cortar(cuenta, dispositivo) {
+export function cortar(cuenta: Cuenta, dispositivo: unknown): boolean {
   const p = deCuenta(cuenta).get(String(dispositivo));
   if (!p) return false;
   p.cortada = true;
@@ -56,7 +59,7 @@ export function cortar(cuenta, dispositivo) {
 /** Para el administrador: cuántas pantallas están viendo ahora. */
 export function resumenPantallas() {
   let pantallas = 0;
-  const porCuenta = {};
+  const porCuenta: Record<string, number> = {};
   for (const [cuentaId, mapa] of activas) {
     const vivas = [...mapa.values()].filter((p) => !p.cortada && Date.now() - p.ultimo <= VIVA).length;
     if (vivas) { pantallas += vivas; porCuenta[cuentaId] = vivas; }

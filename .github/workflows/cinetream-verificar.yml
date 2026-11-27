@@ -1,0 +1,31 @@
+# Cinetream: en cada cambio se revisan los tipos (TypeScript) y se corren las pruebas automáticas.
+# Si algo falla, el cambio queda marcado en rojo antes de llegar a Render.
+name: Cinetream · tipos y pruebas
+
+on:
+  push:
+    paths:
+      - 'cinetream/**'
+      - '.github/workflows/cinetream-verificar.yml'
+  pull_request:
+    paths:
+      - 'cinetream/**'
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cinetream
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cinetream/package-lock.json
+      - run: npm ci
+      - name: Tipos (TypeScript)
+        run: npm run tipos
+      - name: Pruebas
+        run: npm test

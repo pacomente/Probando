@@ -5,6 +5,8 @@
 //   STREAMHG_API          (opcional) dirección de la API; por defecto https://streamhgapi.com
 // La clave nunca sale del servidor: el navegador solo recibe el reproductor de cada película.
 
+import type { InfoImportada } from './tipos.ts';
+
 const cfg = () => ({
   clave: process.env.STREAMHG_CLAVE || '',
   api: (process.env.STREAMHG_API || 'https://streamhgapi.com').replace(/\/$/, ''),
@@ -102,13 +104,13 @@ export async function subidasPendientes() {
 }
 
 /** Datos para «Agregar con un link» a partir del código de un video de tu cuenta. */
-export async function datosParaImportar(codigo, linkPegado) {
+export async function datosParaImportar(codigo: string, linkPegado?: string): Promise<InfoImportada> {
   const f = streamhgConfigurado() ? await infoArchivo(codigo) : null;
   if (streamhgConfigurado() && !f) throw new ErrorStreamHG('Ese video no está en tu cuenta de StreamHG o fue borrado.');
   if (f && !f.listo) throw new ErrorStreamHG('StreamHG todavía está procesando ese video. Probá en unos minutos.');
   const pegadoEsReproductor = /\/e\/[a-z0-9]+/i.test(linkPegado || '');
   return {
-    tipo: 'embed',
+    tipo: 'embed' as const,
     sitio: 'StreamHG',
     streamhg: codigo,
     embed: pegadoEsReproductor ? linkPegado : reproductorDe(codigo, f?.link),

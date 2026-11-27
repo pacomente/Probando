@@ -1,13 +1,16 @@
 // Reproducciones por película y estado de los links externos (en la base de datos, documento «estadisticas»).
-import { documento } from './base.js';
+import { documento } from './base.ts';
 
 const DIA = 86400000;
-const doc = documento('estadisticas', { migrarDe: { archivo: 'estadisticas.json' }, inicial: () => ({}) });
-let datos = doc.leer();
+interface Vistas { total: number; dias: Record<string, number> }
+interface EstadoEnlace { ok: boolean; detalle: string; fecha?: number }
+interface Estadisticas { vistas: Record<string, Vistas>; enlaces: Record<string, EstadoEnlace> }
+const doc = documento<Partial<Estadisticas>>('estadisticas', { migrarDe: { archivo: 'estadisticas.json' }, inicial: () => ({}) });
+const datos = doc.leer() as Estadisticas;
 datos.vistas ||= {};   // id → { total, dias: { 'AAAA-MM-DD': n } }
 datos.enlaces ||= {};  // id → { ok, detalle, fecha }
 
-let pendiente = null;
+let pendiente: NodeJS.Timeout | null = null;
 function guardar() {
   if (pendiente) return;
   pendiente = setTimeout(async () => {
@@ -16,11 +19,11 @@ function guardar() {
   }, 3000);
 }
 
-const hoy = (ms = Date.now()) => new Date(ms).toISOString().slice(0, 10);
+const hoy = (ms = Date.now()): string => new Date(ms).toISOString().slice(0, 10);
 
 // Una vista por persona y película cada 30 minutos: volver a abrirla o adelantar no suma
-const recientes = new Map();
-export function registrarVista(id, quien) {
+const recientes = new Map<string, number>();
+export function registrarVista(id: string, quien: string): boolean {
   const clave = `${quien}|${id}`;
   if (Date.now() - (recientes.get(clave) || 0) < 30 * 60000) return false;
   recientes.set(clave, Date.now());
@@ -35,7 +38,7 @@ export function registrarVista(id, quien) {
   return true;
 }
 
-export function vistas(id, dias = 30) {
+export function vistas(id: string, dias = 30): { total: number; recientes: number } {
   const v = datos.vistas[id];
   if (!v) return { total: 0, recientes: 0 };
   const desde = hoy(Date.now() - (dias - 1) * DIA);
@@ -44,7 +47,7 @@ export function vistas(id, dias = 30) {
 
 // Reproducciones de todo el catálogo por día (para el gráfico del resumen)
 export function vistasPorDia(dias = 30) {
-  const serie = [];
+  const serie: { dia: string; n: number }[] = [];
   for (let i = dias - 1; i >= 0; i--) {
     const d = hoy(Date.now() - i * DIA);
     serie.push({ dia: d, n: Object.values(datos.vistas).reduce((a, v) => a + (v.dias[d] || 0), 0) });
@@ -52,12 +55,12 @@ export function vistasPorDia(dias = 30) {
   return serie;
 }
 
-export const estadoEnlace = (id) => datos.enlaces[id] || null;
-export function guardarEnlace(id, resultado) { datos.enlaces[id] = { ...resultado, fecha: Date.now() }; guardar(); }
-export function olvidarPelicula(id) { delete datos.vistas[id]; delete datos.enlaces[id]; guardar(); }
+export const estadoEnlace = (id: string): EstadoEnlace | null => datos.enlaces[id] || null;
+export function guardarEnlace(id: string, resultado: EstadoEnlace) { datos.enlaces[id] = { ...resultado, fecha: Date.now() }; guardar(); }
+export function olvidarPelicula(id: string) { delete datos.vistas[id]; delete datos.enlaces[id]; guardar(); }
 
 // ¿El link del video sigue andando? Se piden los primeros bytes, como haría el reproductor
-export async function revisarEnlace(url) {
+export async function revisarEnlace(url: string): Promise<EstadoEnlace> {
   try {
     const r = await fetch(url, { headers: { Range: 'bytes=0-1023', 'User-Agent': 'Cinetream/1.0' }, redirect: 'follow', signal: AbortSignal.timeout(15000) });
     r.body?.cancel().catch(() => {});

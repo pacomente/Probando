@@ -1,15 +1,23 @@
 {
   "name": "cinetream",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "description": "Cinetream: plataforma de películas para la tele y el celular.",
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "tipos": "tsc -p tsconfig.json",
+    "test": "node --test \"pruebas/**/*.test.ts\"",
+    "verificar": "npm run tipos && npm test"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22.18"
   },
   "private": true,
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "@types/node": "^22.20.7"
+  }
 }

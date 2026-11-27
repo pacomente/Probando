@@ -4,52 +4,42 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import { Readable } from 'node:stream';
 import { readdir, rename, rm, stat, statfs } from 'node:fs/promises';
 import { once } from 'node:events';
+import { json, leerJSON as leerJSONBase, type Pedido, type Respuesta } from './http.ts';
+import type { Campana, Cuerpo, InfoImportada, Pelicula, Trabajo } from './tipos.ts';
 import path from 'node:path';
 import {
   actualizarPelicula, adminConfigurado, agregarPelicula, buscarPelicula, CARPETA_PORTADAS, CARPETA_VIDEOS,
   claveCorrecta, definirClave, quitarPelicula, todas,
-} from './datos.js';
-import { analizar, descargar, ErrorImportar, revisarReproductor } from './importar.js';
-import { activarPlan, buscarCuenta, guardarCuentas, guardarPlanes, listaPlanes, planEfectivo, todasLasCuentas } from './cuentas.js';
-import { actualizarCampana, buscarCampana, campanas, CARPETA_PIEZAS, crearCampana, ponerPieza, quitarCampana } from './publicidad.js';
-import { modoPrueba } from './pagos.js';
-import { direccionPublica, enInternet, esLocal, ipCliente } from './red.js';
+} from './datos.ts';
+import { analizar, descargar, ErrorImportar, revisarReproductor } from './importar.ts';
+import { activarPlan, buscarCuenta, guardarCuentas, guardarPlanes, listaPlanes, planEfectivo, todasLasCuentas } from './cuentas.ts';
+import { actualizarCampana, buscarCampana, campanas, CARPETA_PIEZAS, crearCampana, ponerPieza, quitarCampana } from './publicidad.ts';
+import { modoPrueba } from './pagos.ts';
+import { direccionPublica, enInternet, esLocal, ipCliente } from './red.ts';
 import {
   borrarObjeto, espacioUsado, ErrorR2, linkSubida, permitirSubidasDesde, probarConexion, r2Bucket, r2Configurado, subirFlujo,
-} from './r2.js';
+} from './r2.ts';
 import {
   archivos as archivosStreamHG, cuenta as cuentaStreamHG, datosParaImportar, ErrorStreamHG, revisarStreamHG,
   streamhgConfigurado, subidasPendientes, subirPorLink,
-} from './streamhg.js';
-import { resumenPantallas } from './pantallas.js';
-import { crearRestablecimiento } from './cuentas.js';
-import { correoConfigurado } from './correo.js';
-import { datosLegales, guardarLegales, legalCompleto, listaTramites, resolverTramite } from './legal.js';
-import { ARCHIVO_BASE, resumenBase } from './base.js';
+} from './streamhg.ts';
+import { resumenPantallas } from './pantallas.ts';
+import { crearRestablecimiento } from './cuentas.ts';
+import { correoConfigurado } from './correo.ts';
+import { datosLegales, guardarLegales, legalCompleto, listaTramites, resolverTramite } from './legal.ts';
+import { ARCHIVO_BASE, resumenBase } from './base.ts';
 import {
   borrarRespaldo, hacerRespaldo, listaRespaldos, prepararRestauracion, restauracionPendiente, rutaRespaldo,
-} from './respaldo.js';
-import { estadoEnlace, guardarEnlace, olvidarPelicula, revisarEnlace, vistas, vistasPorDia } from './estadisticas.js';
+} from './respaldo.ts';
+import { estadoEnlace, guardarEnlace, olvidarPelicula, revisarEnlace, vistas, vistasPorDia } from './estadisticas.ts';
 
 const HORAS_SESION = 12;
-const sesiones = new Map(); // id → vence
+const sesiones = new Map<string, number>(); // id → vence
 const fallos = new Map(); // ip → { n, desde }
-const trabajos = new Map(); // id película → { estado, bytes, total, error, control }
+const trabajos = new Map<string, Trabajo>(); // id película → descarga o copia en curso
 
 // ---------- Utilidades HTTP ----------
-function json(res, estado, datos, cabeceras = {}) {
-  res.writeHead(estado, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...cabeceras });
-  res.end(JSON.stringify(datos));
-}
-function leerJSON(req, limite = 200_000) {
-  return new Promise((resolver, rechazar) => {
-    const partes = [];
-    let total = 0;
-    req.on('data', (d) => { total += d.length; if (total > limite) { rechazar(new Error('Datos demasiado grandes')); req.destroy(); } else partes.push(d); });
-    req.on('end', () => { try { resolver(JSON.parse(Buffer.concat(partes).toString('utf8') || '{}')); } catch { rechazar(new Error('Datos inválidos')); } });
-    req.on('error', rechazar);
-  });
-}
+const leerJSON = (req: Pedido, limite = 200_000) => leerJSONBase(req, limite);
 const cookie = (req, valor, segundos) => `cinetream_admin=${valor}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${segundos}${req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : ''}`;
 export function sesionValida(req) {
   const id = (req.headers.cookie || '').match(/cinetream_admin=([^;]+)/)?.[1];
@@ -74,9 +64,9 @@ function fallo(req) {
 
 // Nombres de archivo propios: nunca se usa el nombre que llega de afuera
 const nombreArchivo = (base, ext) => `${String(base).replace(/[^a-z0-9-]/gi, '').slice(0, 40) || 'pelicula'}-${crypto.randomBytes(4).toString('hex')}${ext}`;
-const EXT_VIDEO = { 'video/mp4': '.mp4', 'video/webm': '.webm', 'video/quicktime': '.mov', 'video/x-m4v': '.m4v', 'video/ogg': '.ogv' };
-const EXT_IMAGEN = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
-const extDe = (url, tipo) => EXT_VIDEO[tipo] || (path.extname(new URL(url).pathname).toLowerCase().match(/^\.(mp4|m4v|webm|mov|ogv)$/)?.[0]) || '.mp4';
+const EXT_VIDEO: Record<string, string> = { 'video/mp4': '.mp4', 'video/webm': '.webm', 'video/quicktime': '.mov', 'video/x-m4v': '.m4v', 'video/ogg': '.ogv' };
+const EXT_IMAGEN: Record<string, string> = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
+const extDe = (url: string, tipo?: string): string => (tipo && EXT_VIDEO[tipo]) || (path.extname(new URL(url).pathname).toLowerCase().match(/^\.(mp4|m4v|webm|mov|ogv)$/)?.[0]) || '.mp4';
 
 async function espacioCarpeta(carpeta) {
   let total = 0;
@@ -94,18 +84,18 @@ async function disco() {
   return { videos, portadas, anuncios, total, libre };
 }
 
-const esExterno = (v) => /^https?:\/\//i.test(v || '');
-const enR2 = (v) => /^r2:/.test(v || '');
+const esExterno = (v: string | null | undefined): v is string => /^https?:\/\//i.test(v || '');
+const enR2 = (v: string | null | undefined): v is string => /^r2:/.test(v || '');
 const TIPOS_VIDEO = { '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime', '.ogv': 'video/ogg' };
 
 // Cuánto ocupa el bucket de R2 (se consulta como mucho una vez por minuto)
-let espacioR2 = { fecha: 0, datos: null };
+let espacioR2: { fecha: number; datos: { total?: number; cantidad?: number; error?: string } | null } = { fecha: 0, datos: null };
 async function datosR2() {
   if (!r2Configurado()) return { configurado: false };
   if (Date.now() - espacioR2.fecha > 60000) {
     try { espacioR2 = { fecha: Date.now(), datos: await espacioUsado() }; } catch (e) { espacioR2 = { fecha: Date.now(), datos: { error: e.message } }; }
   }
-  return { configurado: true, bucket: r2Bucket(), ...espacioR2.datos };
+  return { configurado: true, bucket: r2Bucket(), ...(espacioR2.datos ?? {}) };
 }
 
 // La regla CORS del bucket se pone una sola vez por arranque (para subir directo desde el navegador)
@@ -119,7 +109,7 @@ async function asegurarCors(req) {
 
 // Pasa un video (de un link o del disco) a Cloudflare R2 sin sacarlo de la plataforma mientras sube
 async function pasarAR2(p) {
-  const trabajo = { estado: 'descargando', tipo: 'r2', bytes: 0, total: 0, error: null, control: new AbortController() };
+  const trabajo: Trabajo = { estado: 'descargando', tipo: 'r2', bytes: 0, total: 0, error: null, control: new AbortController() };
   trabajos.set(p.id, trabajo);
   const anterior = p.video;
   const ext = esExterno(anterior) ? extDe(anterior) : path.extname(anterior).toLowerCase() || '.mp4';
@@ -154,7 +144,7 @@ async function pasarAR2(p) {
 // Pasar una película «desde link» a un archivo guardado en el servidor, sin sacarla de la plataforma mientras baja
 async function guardarEnServidor(p) {
   const origen = p.video;
-  const trabajo = { estado: 'descargando', tipo: 'guardar', bytes: 0, total: 0, error: null, control: new AbortController() };
+  const trabajo: Trabajo = { estado: 'descargando', tipo: 'guardar', bytes: 0, total: 0, error: null, control: new AbortController() };
   trabajos.set(p.id, trabajo);
   const archivo = nombreArchivo(p.id, extDe(origen));
   try {
@@ -180,7 +170,7 @@ async function borrarArchivoPropio(ruta) {
 
 // ---------- Importar en segundo plano ----------
 async function importar(p, info, modo) {
-  const trabajo = { estado: 'descargando', bytes: 0, total: info.tamano || 0, error: null, control: new AbortController() };
+  const trabajo: Trabajo = { estado: 'descargando', bytes: 0, total: info.tamano || 0, error: null, control: new AbortController() };
   trabajos.set(p.id, trabajo);
   try {
     // La portada primero: es chica y deja la ficha lista enseguida
@@ -200,7 +190,7 @@ async function importar(p, info, modo) {
       trabajos.delete(p.id);
       await pasarAR2(buscarPelicula(p.id));
       const t = trabajos.get(p.id);
-      if (t?.estado === 'error') throw new ErrorImportar(t.error);
+      if (t?.estado === 'error') throw new ErrorImportar(t.error || 'No se pudo pasar el video a Cloudflare R2.');
       trabajos.set(p.id, trabajo);
     } else if (modo === 'descargar') {
       const archivo = nombreArchivo(p.id, extDe(info.video));
@@ -256,11 +246,11 @@ export async function rutasAdmin(req, res, url) {
     if (!sesionValida(req)) return json(res, 401, { error: 'Iniciá sesión como administrador.' });
 
     if (ruta === '/catalogo') {
-      const extra = {};
+      const extra: Record<string, unknown> = {};
       for (const p of todas()) {
         const local = p.video?.startsWith('videos/');
         extra[p.id] = {
-          bytes: local ? (await stat(path.join(CARPETA_VIDEOS, p.video.slice(7))).catch(() => ({ size: 0 }))).size : enR2(p.video) ? p.tamano : 0,
+          bytes: local ? (await stat(path.join(CARPETA_VIDEOS, String(p.video).slice(7))).catch(() => ({ size: 0 }))).size : enR2(p.video) ? p.tamano : 0,
           vistas: vistas(p.id),
           enlace: esExterno(p.video) || p.embed ? estadoEnlace(p.id) : null,
         };
@@ -300,7 +290,7 @@ export async function rutasAdmin(req, res, url) {
     }
     if (ruta === '/respaldos' && req.method === 'POST') return json(res, 200, { respaldo: hacerRespaldo({ manual: true }) });
     if (ruta === '/respaldos/restaurar' && req.method === 'POST') {
-      const partes = [];
+      const partes: Buffer[] = [];
       let total = 0;
       for await (const parte of req) {
         total += parte.length;
@@ -373,11 +363,11 @@ export async function rutasAdmin(req, res, url) {
     // Revisa que los videos «desde link» sigan funcionando (de a 4 por vez)
     if (ruta === '/enlaces/revisar' && req.method === 'POST') {
       const conLink = todas().filter((p) => esExterno(p.video) || p.embed);
-      const resultados = {};
+      const resultados: Record<string, { ok: boolean; detalle: string }> = {};
       for (let i = 0; i < conLink.length; i += 4) {
         await Promise.all(conLink.slice(i, i + 4).map(async (p) => {
           const r = p.streamhg && streamhgConfigurado() ? await revisarStreamHG(p.streamhg)
-            : p.embed ? await revisarReproductor(p.embed) : await revisarEnlace(p.video);
+            : p.embed ? await revisarReproductor(p.embed) : await revisarEnlace(p.video ?? '');
           guardarEnlace(p.id, r);
           resultados[p.id] = r;
         }));
@@ -497,7 +487,7 @@ export async function rutasAdmin(req, res, url) {
       }
       if (m[2] === '/r2' && req.method === 'POST') {
         if (!r2Configurado()) return json(res, 400, { error: 'Cloudflare R2 no está configurado.' });
-        if (!esExterno(p.video) && !p.video?.startsWith('videos/')) return json(res, 400, { error: 'Esta película no tiene un video para pasar a R2.' });
+        if (!esExterno(p.video) && !String(p.video ?? '').startsWith('videos/')) return json(res, 400, { error: 'Esta película no tiene un video para pasar a R2.' });
         if (trabajos.get(p.id)?.estado === 'descargando') return json(res, 409, { error: 'Ya hay una copia en curso.' });
         pasarAR2(p);
         return json(res, 200, { ok: true });
@@ -523,7 +513,7 @@ export async function rutasAdmin(req, res, url) {
         const tipo = (req.headers['content-type'] || '').split(';')[0];
         if (!EXT_IMAGEN[tipo]) return json(res, 415, { error: 'La portada tiene que ser JPG, PNG o WebP.' });
         const archivo = nombreArchivo(p.id, EXT_IMAGEN[tipo]);
-        const partes = [];
+        const partes: Buffer[] = [];
         let total = 0;
         for await (const parte of req) {
           total += parte.length;
@@ -540,7 +530,7 @@ export async function rutasAdmin(req, res, url) {
     // ---------- Resumen del negocio ----------
     if (ruta === '/resumen') {
       const cuentas = todasLasCuentas();
-      const porPlan = {};
+      const porPlan: Record<string, number> = {};
       let mensual = 0;
       for (const c of cuentas) {
         const plan = planEfectivo(c);
@@ -611,7 +601,7 @@ export async function rutasAdmin(req, res, url) {
         return json(res, 200, { ok: true });
       }
       if (mp[2] && req.method === 'DELETE') {
-        const { anterior } = ponerPieza(c.id, null, null);
+        const anterior = ponerPieza(c.id, null, null)?.anterior;
         if (anterior) await rm(path.join(CARPETA_PIEZAS, path.basename(anterior)), { force: true });
         return json(res, 200, { campana: buscarCampana(c.id) });
       }
@@ -638,7 +628,9 @@ export async function rutasAdmin(req, res, url) {
           await rm(parcial, { force: true });
           return json(res, 400, { error: e.message });
         }
-        const { campana, anterior } = ponerPieza(c.id, `anuncios/${archivo}`, EXT_IMAGEN[tipo] ? 'imagen' : 'video');
+        const cambio = ponerPieza(c.id, `anuncios/${archivo}`, EXT_IMAGEN[tipo] ? 'imagen' : 'video');
+        if (!cambio) return json(res, 404, { error: 'Esa campaña no existe.' });
+        const { campana, anterior } = cambio;
         if (anterior) await rm(path.join(CARPETA_PIEZAS, path.basename(anterior)), { force: true });
         return json(res, 200, { campana });
       }

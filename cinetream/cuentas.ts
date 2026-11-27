@@ -4,27 +4,28 @@
 import crypto from 'node:crypto';
 import { existsSync, readFileSync, renameSync } from 'node:fs';
 import path from 'node:path';
-import { CARPETA_DATOS, coleccion, documento } from './base.js';
+import { CARPETA_DATOS, coleccion, documento } from './base.ts';
+import type { Cuenta, Pago, Plan } from './tipos.ts';
 
 const DIAS_SESION = 60;
 const DIA = 86400000;
 
 // ---------- Planes ----------
 // Precios en pesos, de ejemplo: el administrador los cambia
-const PLANES_INICIALES = [
-  { id: 'gratis', nombre: 'Gratis', precio: 0, periodo: 'mes', anuncios: true, plus: false, descripcion: 'Todo el catálogo libre, con publicidad.' },
-  { id: 'plus', nombre: 'Plus', precio: 2999, periodo: 'mes', anuncios: false, plus: true, descripcion: 'Sin publicidad y con los títulos Plus.' },
-  { id: 'plus-anual', nombre: 'Plus anual', precio: 29990, periodo: 'año', anuncios: false, plus: true, descripcion: 'Lo mismo que Plus, pagando una vez al año: dos meses de regalo.' },
+const PLANES_INICIALES: Plan[] = [
+  { id: 'gratis', nombre: 'Gratis', precio: 0, periodo: 'mes', anuncios: true, plus: false, pantallas: 1, descripcion: 'Todo el catálogo libre, con publicidad.' },
+  { id: 'plus', nombre: 'Plus', precio: 2999, periodo: 'mes', anuncios: false, plus: true, pantallas: 2, descripcion: 'Sin publicidad y con los títulos Plus.' },
+  { id: 'plus-anual', nombre: 'Plus anual', precio: 29990, periodo: 'año', anuncios: false, plus: true, pantallas: 2, descripcion: 'Lo mismo que Plus, pagando una vez al año: dos meses de regalo.' },
 ];
 // Pantallas a la vez de cada plan (los planes guardados antes de existir este dato toman estos valores)
-const PANTALLAS_INICIALES = { gratis: 1, plus: 2, 'plus-anual': 2 };
-const limitarPantallas = (n) => Math.min(Math.max(Math.round(Number(n)) || 1, 1), 10);
-export const pantallasDe = (plan) => limitarPantallas(plan?.pantallas ?? PANTALLAS_INICIALES[plan?.id] ?? 1);
-const docPlanes = documento('planes', { migrarDe: { archivo: 'planes.json' }, inicial: () => PLANES_INICIALES });
+const PANTALLAS_INICIALES: Record<string, number> = { gratis: 1, plus: 2, 'plus-anual': 2 };
+const limitarPantallas = (n: unknown) => Math.min(Math.max(Math.round(Number(n)) || 1, 1), 10);
+export const pantallasDe = (plan: Partial<Plan> | undefined | null): number => limitarPantallas(plan?.pantallas ?? PANTALLAS_INICIALES[plan?.id ?? ''] ?? 1);
+const docPlanes = documento<Plan[]>('planes', { migrarDe: { archivo: 'planes.json' }, inicial: () => PLANES_INICIALES });
 let planes = docPlanes.leer().map((p) => ({ ...p, pantallas: pantallasDe(p) }));
 export const listaPlanes = () => planes;
-export const buscarPlan = (id) => planes.find((p) => p.id === id);
-export async function guardarPlanes(nuevos) {
+export const buscarPlan = (id: string): Plan | undefined => planes.find((p) => p.id === id);
+export async function guardarPlanes(nuevos: Partial<Plan>[]): Promise<Plan[]> {
   // Solo se cambian nombre, precio, descripción, pantallas a la vez y si está a la venta; los demás beneficios son fijos
   planes = planes.map((p) => {
     const n = nuevos.find((x) => x.id === p.id) || {};
@@ -42,7 +43,7 @@ export async function guardarPlanes(nuevos) {
 }
 
 // ---------- Cuentas ----------
-const tablaCuentas = coleccion('cuentas', {
+const tablaCuentas = coleccion<Cuenta>('cuentas', {
   indices: [{ campo: 'email', unico: true }, { campo: 'plan' }],
   migrarDe: { archivo: 'cuentas.json', extraer: (x) => x },
 });
@@ -53,11 +54,11 @@ export function guardarCuentas() {
 }
 
 export const todasLasCuentas = () => cuentas;
-export const buscarCuenta = (id) => cuentas.find((c) => c.id === id);
+export const buscarCuenta = (id: string): Cuenta | undefined => cuentas.find((c) => c.id === id);
 const normalizarCorreo = (e) => String(e || '').trim().toLowerCase();
 const correoValido = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) && e.length <= 120;
 
-export function crearCuenta(email, clave, nombre) {
+export function crearCuenta(email: unknown, clave: unknown, nombre?: unknown): Cuenta {
   const correo = normalizarCorreo(email);
   if (!correoValido(correo)) throw new Error('Escribí un correo válido.');
   if (typeof clave !== 'string' || clave.length < 8) throw new Error('La contraseña tiene que tener al menos 8 caracteres.');
@@ -73,18 +74,18 @@ export function crearCuenta(email, clave, nombre) {
   return cuenta;
 }
 
-export const buscarPorCorreo = (email) => cuentas.find((c) => c.email === normalizarCorreo(email));
+export const buscarPorCorreo = (email: string): Cuenta | undefined => cuentas.find((c) => c.email === normalizarCorreo(email));
 
 // ---------- Olvidé mi contraseña ----------
 // Se guarda solo el hash del link: aunque alguien lea cuentas.json no puede usarlo
-const sha256 = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
-export function crearRestablecimiento(cuenta, horas = 1) {
+const sha256 = (t: unknown) => crypto.createHash('sha256').update(String(t)).digest('hex');
+export function crearRestablecimiento(cuenta: Cuenta, horas = 1): string {
   const token = crypto.randomBytes(32).toString('base64url');
   cuenta.restablecer = { hash: sha256(token), vence: Date.now() + horas * 3600000 };
   guardarCuentas();
   return token;
 }
-export function restablecerClave(token, clave) {
+export function restablecerClave(token: string, clave: unknown): Cuenta {
   if (typeof clave !== 'string' || clave.length < 8) throw new Error('La contraseña tiene que tener al menos 8 caracteres.');
   const h = Buffer.from(sha256(token || ''));
   const cuenta = cuentas.find((c) => c.restablecer && c.restablecer.vence > Date.now()
@@ -99,12 +100,12 @@ export function restablecerClave(token, clave) {
 }
 
 /** Borra la cuenta y sus datos (derecho de supresión, Ley 25.326). */
-export function eliminarCuenta(cuenta) {
+export function eliminarCuenta(cuenta: Cuenta) {
   cuentas = cuentas.filter((c) => c.id !== cuenta.id);
   guardarCuentas();
 }
 
-export function verificarCuenta(email, clave) {
+export function verificarCuenta(email: unknown, clave: unknown): Cuenta | null {
   const cuenta = cuentas.find((c) => c.email === normalizarCorreo(email));
   // Se calcula igual aunque no exista, para no revelar qué correos tienen cuenta por el tiempo de respuesta
   const sal = cuenta?.sal || '00';
@@ -114,17 +115,17 @@ export function verificarCuenta(email, clave) {
 }
 
 // El plan que vale ahora: un plan pago vencido o impago vuelve a Gratis
-export function planEfectivo(cuenta) {
-  const gratis = buscarPlan('gratis');
+export function planEfectivo(cuenta: Cuenta | null | undefined): Plan {
+  const gratis = buscarPlan('gratis') as Plan; // el plan Gratis siempre existe
   if (!cuenta) return gratis;
   const plan = buscarPlan(cuenta.plan);
   if (!plan || plan.id === 'gratis') return gratis;
-  const vigente = ['activa', 'cancelada'].includes(cuenta.estado) && cuenta.vence && cuenta.vence > Date.now();
+  const vigente = ['activa', 'cancelada'].includes(cuenta.estado) && Boolean(cuenta.vence && cuenta.vence > Date.now());
   return vigente ? plan : gratis;
 }
 
 // Activa un plan pago hasta una fecha (lo llaman el pago aprobado o el administrador)
-export function activarPlan(cuenta, planId, { vence, pago } = {}) {
+export function activarPlan(cuenta: Cuenta, planId: string, { vence, pago }: { vence?: number | null; pago?: Pago } = {}): Cuenta {
   // Fecha de contratación: cuenta para el plazo del botón de arrepentimiento (10 días)
   if (planId !== 'gratis' && planEfectivo(cuenta).id !== planId) cuenta.contratado = Date.now();
   const plan = buscarPlan(planId);
@@ -138,13 +139,13 @@ export function activarPlan(cuenta, planId, { vence, pago } = {}) {
 }
 
 // Cancelar: se deja de renovar, pero se sigue disfrutando hasta la fecha pagada
-export function cancelarPlan(cuenta) {
+export function cancelarPlan(cuenta: Cuenta) {
   if (cuenta.plan !== 'gratis') cuenta.estado = 'cancelada';
   guardarCuentas();
   return cuenta;
 }
 
-export function datosPublicos(cuenta) {
+export function datosPublicos(cuenta: Cuenta) {
   const plan = planEfectivo(cuenta);
   return {
     email: cuenta.email, nombre: cuenta.nombre, plan: plan.id, planNombre: plan.nombre,
@@ -155,22 +156,22 @@ export function datosPublicos(cuenta) {
 
 // ---------- Sesiones firmadas ----------
 // Clave con la que se firman las sesiones (en la base, así un respaldo restaurado no cierra la sesión de todos)
-const docSecreto = documento('secreto');
+const docSecreto = documento<string>('secreto');
 let secreto = docSecreto.leer();
 if (!secreto) {
   const viejo = path.join(CARPETA_DATOS, 'secreto');
   if (existsSync(viejo)) { secreto = readFileSync(viejo, 'utf8').trim(); renameSync(viejo, `${viejo}.migrado`); } else secreto = crypto.randomBytes(32).toString('hex');
   docSecreto.guardar(secreto);
 }
-const firmar = (texto) => crypto.createHmac('sha256', secreto).update(texto).digest('base64url');
+const firmar = (texto: string) => crypto.createHmac('sha256', secreto).update(texto).digest('base64url');
 
-export function crearToken(cuenta) {
+export function crearToken(cuenta: Cuenta): string {
   // «v»: al cambiar la contraseña sube la versión y las sesiones viejas dejan de valer
   const cuerpo = Buffer.from(JSON.stringify({ c: cuenta.id, e: Date.now() + DIAS_SESION * DIA, v: cuenta.version || 0 })).toString('base64url');
   return `${cuerpo}.${firmar(cuerpo)}`;
 }
 
-export function cuentaDeToken(token) {
+export function cuentaDeToken(token: string | undefined): Cuenta | null {
   const [cuerpo, firma] = String(token || '').split('.');
   if (!cuerpo || !firma) return null;
   const esperada = Buffer.from(firmar(cuerpo));
@@ -183,8 +184,8 @@ export function cuentaDeToken(token) {
   } catch { return null; }
 }
 
-export const cuentaDe = (req) => cuentaDeToken((req.headers.cookie || '').match(/cinetream_sesion=([^;]+)/)?.[1]);
-export const cookieSesion = (req, token, segundos = DIAS_SESION * 86400) =>
+export const cuentaDe = (req: import('node:http').IncomingMessage): Cuenta | null => cuentaDeToken((req.headers.cookie || '').match(/cinetream_sesion=([^;]+)/)?.[1]);
+export const cookieSesion = (req: import('node:http').IncomingMessage, token: string, segundos = DIAS_SESION * 86400) =>
   `cinetream_sesion=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${segundos}${req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : ''}`;
 
 // ---------- Ingresar en la tele con un código ----------
@@ -199,14 +200,14 @@ export function nuevoCodigoTV() {
   codigos.set(codigo, { creado: Date.now(), cuentaId: null });
   return codigo;
 }
-export function vincularCodigo(codigo, cuenta) {
+export function vincularCodigo(codigo: unknown, cuenta: Cuenta): boolean {
   const c = codigos.get(String(codigo || '').toUpperCase().replace(/[^A-Z0-9]/g, ''));
   if (!c || Date.now() - c.creado > 10 * 60000) return false;
   c.cuentaId = cuenta.id;
   return true;
 }
 // Devuelve la cuenta una sola vez: el código se descarta apenas la tele entra
-export function estadoCodigo(codigo) {
+export function estadoCodigo(codigo: string | null): { estado: string; cuenta?: Cuenta } {
   const c = codigos.get(codigo);
   if (!c || Date.now() - c.creado > 10 * 60000) return { estado: 'vencido' };
   if (!c.cuentaId) return { estado: 'esperando' };

@@ -360,28 +360,50 @@ Esto es la plataforma (la parte que ve el público). Para venderla como servicio
 - **Apps de Samsung (Tizen) y LG (webOS)**: se arman empaquetando esta misma web con las herramientas de cada marca. La de Android TV ya está en `android/`.
 - **Google Play**: subir los APK (o un AAB, con `./gradlew bundleRelease`) firmados con tu clave propia.
 
+## Para programar: TypeScript y pruebas
+
+El servidor está escrito en **TypeScript** (`*.ts`). Node 22.18 o más nuevo lo ejecuta directo, sin compilar:
+`node server.js` arranca igual que antes (en Render no hay que cambiar nada, solo tener `NODE_VERSION=22`).
+
+```bash
+npm install          # solo para las herramientas de desarrollo (TypeScript)
+npm run dev          # servidor que se reinicia solo al guardar cambios
+npm run tipos        # revisa los tipos de todo el servidor
+npm test             # pruebas automáticas (cuentas, pantallas, base de datos, links, R2 y el servidor entero)
+npm run verificar    # las dos cosas
+```
+
+- `tipos.ts` define los datos de Cinetream (película, cuenta, plan, campaña, trámite…); `http.ts`, las utilidades de las rutas.
+- `tsconfig.json` usa modo estricto y solo sintaxis que Node puede ejecutar directo (`erasableSyntaxOnly`).
+- Las pruebas están en `pruebas/` y usan el corredor de pruebas de Node (`node:test`). Una de ellas arranca el servidor
+  de verdad en una carpeta vacía, como una instalación nueva.
+- En GitHub, cada cambio corre los tipos y las pruebas (*Actions → Cinetream · tipos y pruebas*).
+- La plataforma y el administrador (`public/`) siguen en JavaScript; el próximo paso es pasarlos a TypeScript con React.
+
 ## Archivos
 
 | Archivo | Para qué |
 |---|---|
-| `server.js` | Servidor local: sirve la plataforma, el catálogo, las portadas y los videos por partes, para poder adelantar. |
-| `admin.js` | Rutas del administrador: contraseña, importar, subir, editar y eliminar. |
-| `importar.js` | Análisis de links (Internet Archive, archivo directo, página con video) y descargas. |
-| `datos.js` | Catálogo y contraseña guardados en `datos/`. |
-| `estadisticas.js` | Reproducciones por película y estado de los links. |
-| `base.js` | Base de datos SQLite: colecciones, documentos, migración de los .json viejos y copias. |
-| `respaldo.js` | Copias de seguridad diarias, descarga y restauración. |
-| `legal.js` · `correo.js` | Datos legales, trámites (baja, arrepentimiento, eliminación) y correos de contraseña nueva. |
+| `server.js` · `servidor.ts` | Arranque y servidor: sirve la plataforma, el catálogo, las portadas y los videos por partes. |
+| `tipos.ts` · `http.ts` | Tipos de los datos y utilidades HTTP. |
+| `pruebas/` | Pruebas automáticas (`npm test`). |
+| `admin.ts` | Rutas del administrador: contraseña, importar, subir, editar y eliminar. |
+| `importar.ts` | Análisis de links (Internet Archive, archivo directo, página con video) y descargas. |
+| `datos.ts` | Catálogo y contraseña guardados en `datos/`. |
+| `estadisticas.ts` | Reproducciones por película y estado de los links. |
+| `base.ts` | Base de datos SQLite: colecciones, documentos, migración de los .json viejos y copias. |
+| `respaldo.ts` | Copias de seguridad diarias, descarga y restauración. |
+| `legal.ts` · `correo.ts` | Datos legales, trámites (baja, arrepentimiento, eliminación) y correos de contraseña nueva. |
 | `public/legal.html` · `tramites.html` · `restablecer.html` | Términos y privacidad; botones de baja y arrepentimiento; contraseña nueva. |
-| `pantallas.js` · `public/pantallas.js` | Límite de pantallas a la vez: pedir lugar, señal mientras se ve y cortar en otro equipo. |
-| `streamhg.js` | Tu cuenta de StreamHG: lista de videos, datos, subida por link y reproductor para insertar. |
-| `r2.js` | Videos en Cloudflare R2: firma de pedidos (compatible con S3), subidas por partes y links firmados. |
-| `red.js` | IP del visitante y pedidos locales, también detrás del proxy de Render. |
+| `pantallas.ts` · `public/pantallas.js` | Límite de pantallas a la vez: pedir lugar, señal mientras se ve y cortar en otro equipo. |
+| `streamhg.ts` | Tu cuenta de StreamHG: lista de videos, datos, subida por link y reproductor para insertar. |
+| `r2.ts` | Videos en Cloudflare R2: firma de pedidos (compatible con S3), subidas por partes y links firmados. |
+| `red.ts` | IP del visitante y pedidos locales, también detrás del proxy de Render. |
 | `../render.yaml` | Configuración para publicar en Render. |
-| `cuentas.js` | Cuentas, planes, sesiones y código para la tele. |
-| `pagos.js` | Suscripciones con Mercado Pago (o el modo prueba). |
-| `publicidad.js` | Campañas, piezas y estadísticas de publicidad. |
-| `rutas-cuenta.js` | Rutas del público: cuenta, planes, pagos y avisos. |
+| `cuentas.ts` | Cuentas, planes, sesiones y código para la tele. |
+| `pagos.ts` | Suscripciones con Mercado Pago (o el modo prueba). |
+| `publicidad.ts` | Campañas, piezas y estadísticas de publicidad. |
+| `rutas-cuenta.ts` | Rutas del público: cuenta, planes, pagos y avisos. |
 | `public/cuenta.js` · `anuncios.js` | Pantallas de bienvenida y planes; avisos antes de la película y banners. |
 | `public/app-nativa.js` | Conexión con las apps de Android: elegir servidor, buscarlo en la wifi, pantalla encendida. |
 | `public/descargar.html` | Página para bajar las apps (lee los APK de `descargas/`). |

@@ -2,37 +2,27 @@
 import {
   activarPlan, buscarCuenta, buscarPorCorreo, crearRestablecimiento, eliminarCuenta, restablecerClave, buscarPlan, cancelarPlan, cookieSesion, crearCuenta, crearToken, cuentaDe, datosPublicos,
   estadoCodigo, guardarCuentas, listaPlanes, nuevoCodigoTV, planEfectivo, verificarCuenta, vincularCodigo,
-} from './cuentas.js';
-import { cancelarEnMercadoPago, consultarSuscripcion, crearSuscripcion, firmaValida, modoPrueba } from './pagos.js';
-import { campanasVigentes, registrarEvento } from './publicidad.js';
-import { ipCliente } from './red.js';
-import { cortar, empezar, latido, pantallasActivas, terminar } from './pantallas.js';
-import { correoConfigurado, correoRestablecer, enviarCorreo } from './correo.js';
-import { datosLegales, listaTramites, registrarTramite } from './legal.js';
+} from './cuentas.ts';
+import { cancelarEnMercadoPago, consultarSuscripcion, crearSuscripcion, firmaValida, modoPrueba } from './pagos.ts';
+import { campanasVigentes, registrarEvento } from './publicidad.ts';
+import { direccionPublica, ipCliente } from './red.ts';
+import { json, leerJSON, type Pedido, type Respuesta } from './http.ts';
+import type { EstadoSuscripcion } from './pagos.ts';
+import { cortar, empezar, latido, pantallasActivas, terminar } from './pantallas.ts';
+import { correoConfigurado, correoRestablecer, enviarCorreo } from './correo.ts';
+import { datosLegales, listaTramites, registrarTramite } from './legal.ts';
 
 const DIA = 86400000;
-const fallos = new Map(); // ip → { n, desde }: freno a quien prueba contraseñas
+const fallos = new Map<string, { n: number; desde: number }>(); // ip → intentos: freno a quien prueba contraseñas
 
-function json(res, estado, datos, cabeceras = {}) {
-  res.writeHead(estado, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...cabeceras });
-  res.end(JSON.stringify(datos));
-}
-function leerJSON(req, limite = 20000) {
-  return new Promise((resolver, rechazar) => {
-    const partes = [];
-    let total = 0;
-    req.on('data', (d) => { total += d.length; if (total > limite) { rechazar(new Error('Datos demasiado grandes')); req.destroy(); } else partes.push(d); });
-    req.on('end', () => { try { resolver(JSON.parse(Buffer.concat(partes).toString('utf8') || '{}')); } catch { rechazar(new Error('Datos inválidos')); } });
-    req.on('error', rechazar);
-  });
-}
 const ip = ipCliente;
-const bloqueado = (req) => { const f = fallos.get(ip(req)); return f && Date.now() - f.desde < 15 * 60000 && f.n >= 10; };
-const fallo = (req) => { const f = fallos.get(ip(req)); if (!f || Date.now() - f.desde > 15 * 60000) fallos.set(ip(req), { n: 1, desde: Date.now() }); else f.n++; };
-const base = (req) => `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host}`;
+const bloqueado = (req: Pedido) => { const f = fallos.get(ip(req)); return Boolean(f && Date.now() - f.desde < 15 * 60000 && f.n >= 10); };
+const fallo = (req: Pedido) => { const f = fallos.get(ip(req)); if (!f || Date.now() - f.desde > 15 * 60000) fallos.set(ip(req), { n: 1, desde: Date.now() }); else f.n++; };
+// Dirección pública de Cinetream (PUBLIC_BASE_URL o la que da Render); si no, la del pedido
+const base = (req: Pedido) => direccionPublica(req) || `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host}`;
 
 // Pago confirmado por Mercado Pago: se activa el plan hasta el próximo cobro (con 3 días de gracia)
-function aplicarSuscripcion(s) {
+function aplicarSuscripcion(s: EstadoSuscripcion) {
   const cuenta = buscarCuenta(s.cuentaId);
   if (!cuenta || !buscarPlan(s.planId)) return null;
   if (s.autorizada) {
@@ -43,7 +33,7 @@ function aplicarSuscripcion(s) {
   return cuenta;
 }
 
-export async function rutasCuenta(req, res, url) {
+export async function rutasCuenta(req: Pedido, res: Respuesta, url: URL): Promise<void> {
   const ruta = url.pathname;
   try {
     if (ruta === '/api/planes') {
@@ -123,7 +113,7 @@ export async function rutasCuenta(req, res, url) {
 
     // ---------- Aviso de Mercado Pago ----------
     if (ruta === '/api/pagos/mercadopago' && req.method === 'POST') {
-      const cuerpo = await leerJSON(req).catch(() => ({}));
+      const cuerpo = await leerJSON(req).catch((): Record<string, any> => ({}));
       const tipo = cuerpo.type || url.searchParams.get('type') || url.searchParams.get('topic');
       const id = cuerpo.data?.id || url.searchParams.get('data.id') || url.searchParams.get('id');
       if (!firmaValida(req, id)) return json(res, 401, { error: 'firma inválida' });

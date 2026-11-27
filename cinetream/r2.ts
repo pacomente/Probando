@@ -21,21 +21,24 @@ export const r2Configurado = () => { const c = cfg(); return Boolean(c.endpoint 
 export const r2Bucket = () => cfg().bucket;
 
 // ---------- Firma AWS Signature V4 ----------
-const sha256 = (datos) => crypto.createHash('sha256').update(datos).digest('hex');
-const hmac = (clave, texto) => crypto.createHmac('sha256', clave).update(texto).digest();
-const codificar = (t) => encodeURIComponent(t).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
-const rutaCodificada = (ruta) => ruta.split('/').map(codificar).join('/');
-const consulta = (params) => Object.keys(params).sort().map((k) => `${codificar(k)}=${codificar(String(params[k]))}`).join('&');
+const sha256 = (datos: string | Buffer) => crypto.createHash('sha256').update(datos).digest('hex');
+const hmac = (clave: string | Buffer, texto: string) => crypto.createHmac('sha256', clave).update(texto).digest();
+const codificar = (t: string) => encodeURIComponent(t).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+const rutaCodificada = (ruta: string) => ruta.split('/').map(codificar).join('/');
+const consulta = (params: Record<string, string>) => Object.keys(params).sort().map((k) => `${codificar(k)}=${codificar(String(params[k]))}`).join('&');
 const fechas = (ahora = new Date()) => {
   const amz = ahora.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   return { amz, dia: amz.slice(0, 8) };
 };
-function claveFirma(secreta, dia, region, servicio = 's3') {
+function claveFirma(secreta: string, dia: string, region: string, servicio = 's3') {
   return hmac(hmac(hmac(hmac(`AWS4${secreta}`, dia), region), servicio), 'aws4_request');
 }
 
 /** Firma un pedido (cabecera Authorization). Exportada para probarla con los ejemplos oficiales de AWS. */
-export function firmarPedido({ metodo, host, ruta, params = {}, cabeceras = {}, hashCuerpo, id, secreta, region, ahora }) {
+interface Credenciales { id: string; secreta: string; region: string; ahora?: Date }
+type Params = Record<string, string>;
+export function firmarPedido({ metodo, host, ruta, params = {}, cabeceras = {}, hashCuerpo, id, secreta, region, ahora }:
+  Credenciales & { metodo: string; host: string; ruta: string; params?: Params; cabeceras?: Record<string, string>; hashCuerpo: string }): Record<string, string> {
   const { amz, dia } = fechas(ahora);
   const todas = { ...cabeceras, host, 'x-amz-date': amz, 'x-amz-content-sha256': hashCuerpo };
   const nombres = Object.keys(todas).map((k) => k.toLowerCase()).sort();
@@ -52,7 +55,8 @@ export function firmarPedido({ metodo, host, ruta, params = {}, cabeceras = {}, 
 }
 
 /** URL prefirmada (el permiso va en la dirección): sirve para reproducir o para subir desde el navegador. */
-export function urlFirmada({ metodo = 'GET', host, ruta, segundos = 3600, id, secreta, region, ahora, base, params = {} }) {
+export function urlFirmada({ metodo = 'GET', host, ruta, segundos = 3600, id, secreta, region, ahora, base, params = {} }:
+  Credenciales & { metodo?: string; host: string; ruta: string; segundos?: number; base?: string; params?: Params }): string {
   const { amz, dia } = fechas(ahora);
   const alcance = `${dia}/${region}/s3/aws4_request`;
   const q = {
@@ -77,7 +81,8 @@ function destino(clave = '') {
   return { c, host: u.host, base: `${u.protocol}//${u.host}`, ruta };
 }
 
-async function pedir(metodo, clave, { params = {}, cuerpo, cabeceras = {}, senal } = {}) {
+async function pedir(metodo: string, clave: string, { params = {}, cuerpo, cabeceras = {}, senal }:
+  { params?: Params; cuerpo?: string | Buffer; cabeceras?: Record<string, string>; senal?: AbortSignal } = {}): Promise<Response> {
   const { c, host, base, ruta } = destino(clave);
   const datos = cuerpo === undefined ? Buffer.alloc(0) : Buffer.isBuffer(cuerpo) ? cuerpo : Buffer.from(cuerpo);
   const firmadas = firmarPedido({ metodo, host, ruta, params, cabeceras, hashCuerpo: sha256(datos), id: c.id, secreta: c.secreta, region: c.region });
@@ -95,8 +100,10 @@ async function pedir(metodo, clave, { params = {}, cuerpo, cabeceras = {}, senal
 }
 
 export class ErrorR2 extends Error {
-  constructor(codigo, estado) {
-    const MENSAJES = {
+  codigo: string;
+  estado: number;
+  constructor(codigo: string, estado: number) {
+    const MENSAJES: Record<string, string> = {
       InvalidAccessKeyId: 'La clave de R2 (R2_CLAVE_ID) no es válida.',
       SignatureDoesNotMatch: 'La clave secreta de R2 (R2_CLAVE_SECRETA) no coincide.',
       NoSuchBucket: 'No existe ese bucket en R2 (revisá R2_BUCKET).',
@@ -109,22 +116,22 @@ export class ErrorR2 extends Error {
 }
 
 /** Link firmado para ver un video (vence solo). */
-export function linkReproduccion(clave, segundos = 6 * 3600) {
+export function linkReproduccion(clave: string, segundos = 6 * 3600): string {
   const { c, host, base, ruta } = destino(clave);
   return urlFirmada({ metodo: 'GET', host, base, ruta, segundos, id: c.id, secreta: c.secreta, region: c.region });
 }
 
 /** Link firmado para que el navegador del administrador suba el archivo directo a R2. */
-export function linkSubida(clave, segundos = 6 * 3600) {
+export function linkSubida(clave: string, segundos = 6 * 3600): string {
   const { c, host, base, ruta } = destino(clave);
   return urlFirmada({ metodo: 'PUT', host, base, ruta, segundos, id: c.id, secreta: c.secreta, region: c.region });
 }
 
-export async function borrarObjeto(clave) {
+export async function borrarObjeto(clave: string) {
   await pedir('DELETE', clave).catch((e) => { if (e.estado !== 404) throw e; });
 }
 
-export async function infoObjeto(clave) {
+export async function infoObjeto(clave: string): Promise<{ tamano: number; tipo: string } | null> {
   try {
     const r = await pedir('HEAD', clave);
     return { tamano: Number(r.headers.get('content-length')) || 0, tipo: r.headers.get('content-type') || '' };
@@ -138,7 +145,7 @@ export async function infoObjeto(clave) {
 export async function espacioUsado() {
   let total = 0;
   let cantidad = 0;
-  let token = null;
+  let token: string | null | undefined = null;
   do {
     const params = { 'list-type': '2', 'max-keys': '1000', ...(token ? { 'continuation-token': token } : {}) };
     const xml = await (await pedir('GET', '', { params })).text();
@@ -149,7 +156,7 @@ export async function espacioUsado() {
 }
 
 /** Permite que el administrador suba directo desde el navegador (regla CORS del bucket). */
-export async function permitirSubidasDesde(origen) {
+export async function permitirSubidasDesde(origen: string) {
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <CORSConfiguration><CORSRule><AllowedOrigin>${origen.replace(/[<>&"]/g, '')}</AllowedOrigin><AllowedMethod>PUT</AllowedMethod><AllowedMethod>GET</AllowedMethod><AllowedMethod>HEAD</AllowedMethod><AllowedHeader>*</AllowedHeader><ExposeHeader>ETag</ExposeHeader><MaxAgeSeconds>3600</MaxAgeSeconds></CORSRule></CORSConfiguration>`;
   const md5 = crypto.createHash('md5').update(xml).digest('base64');
@@ -170,12 +177,13 @@ export async function probarConexion() {
  * Sube un video a R2 desde un flujo de datos (un link o un archivo del disco), en partes de 16 MB.
  * Sirve para películas de muchos GB sin cargarlas enteras en memoria.
  */
-export async function subirFlujo(clave, flujo, { tipo = 'video/mp4', alProgreso, senal } = {}) {
+export async function subirFlujo(clave: string, flujo: AsyncIterable<Buffer>, { tipo = 'video/mp4', alProgreso, senal }:
+  { tipo?: string; alProgreso?: (bytes: number) => void; senal?: AbortSignal } = {}): Promise<number> {
   const inicio = await (await pedir('POST', clave, { params: { uploads: '' }, cabeceras: { 'content-type': tipo }, senal })).text();
   const subida = inicio.match(/<UploadId>([^<]+)<\/UploadId>/)?.[1];
   if (!subida) throw new Error('R2 no aceptó empezar la subida.');
-  const partes = [];
-  let buffer = [];
+  const partes: { numero: number; etag: string | null }[] = [];
+  let buffer: Buffer[] = [];
   let enBuffer = 0;
   let total = 0;
   const TAM = 16 * 1024 ** 2;

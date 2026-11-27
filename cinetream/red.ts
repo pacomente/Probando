@@ -3,15 +3,15 @@
 const DETRAS_DE_PROXY = process.env.RENDER === 'true' || process.env.DETRAS_DE_PROXY === '1';
 const LOCALES = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
 
-export function ipCliente(req) {
+export function ipCliente(req: import('node:http').IncomingMessage): string {
   const reenviada = req.headers['x-forwarded-for'];
-  if (DETRAS_DE_PROXY && reenviada) return String(reenviada).split(',').pop().trim();
+  if (DETRAS_DE_PROXY && reenviada) return String(reenviada).split(',').pop()?.trim() || '';
   return req.socket.remoteAddress || '';
 }
 
 // Cinetream publicado en internet (Render u otro hosting) o en una PC de la casa
 export const enInternet = DETRAS_DE_PROXY;
-export const direccionPublica = (req) => process.env.RENDER_EXTERNAL_URL
+export const direccionPublica = (req: import('node:http').IncomingMessage): string => (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '') || process.env.RENDER_EXTERNAL_URL
   || (enInternet ? `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}` : '');
 
 // Pedido hecho desde la misma PC donde corre Cinetream (nunca es así en Render)

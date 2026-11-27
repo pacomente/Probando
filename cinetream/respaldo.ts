@@ -3,7 +3,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { ARCHIVO_BASE, CARPETA_DATOS, copiarBase } from './base.js';
+import { ARCHIVO_BASE, CARPETA_DATOS, copiarBase } from './base.ts';
 
 export const CARPETA_RESPALDOS = path.join(CARPETA_DATOS, 'respaldos');
 mkdirSync(CARPETA_RESPALDOS, { recursive: true });

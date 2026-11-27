@@ -8,7 +8,8 @@
 import { createWriteStream } from 'node:fs';
 import { rename, rm } from 'node:fs/promises';
 import { once } from 'node:events';
-import { datosParaImportar } from './streamhg.js';
+import { datosParaImportar } from './streamhg.ts';
+import type { InfoImportada } from './tipos.ts';
 
 // Se puede cambiar para pruebas; en uso normal es Internet Archive
 const ARCHIVE = (process.env.ARCHIVE_URL || 'https://archive.org').replace(/\/$/, '');
@@ -21,7 +22,7 @@ const VIDEO_EXT = /\.(mp4|m4v|webm|mov|ogv)(\?|#|$)/i;
 
 export class ErrorImportar extends Error {}
 
-function validarLink(url) {
+function validarLink(url: string): URL {
   let u;
   try { u = new URL(url); } catch { throw new ErrorImportar('Ese link no es válido. Copialo completo, empezando por https://'); }
   if (!['http:', 'https:'].includes(u.protocol)) throw new ErrorImportar('El link tiene que empezar con http:// o https://');
@@ -32,8 +33,9 @@ function validarLink(url) {
 }
 
 // ---------- Reproductores oficiales (no se descarga nada) ----------
-const sitioDe = (url) => new URL(url).hostname.replace(/^www\./, '');
-function reproductorConocido(u) {
+const sitioDe = (url: string) => new URL(url).hostname.replace(/^www\./, '');
+interface Reproductor { proveedor: string; id: string; embed: string; oembed?: string; portadas?: string[] }
+function reproductorConocido(u: URL): Reproductor | null {
   const h = u.hostname.replace(/^(www|m)\./, '');
   let id;
   if (h === 'youtu.be') id = u.pathname.slice(1).split('/')[0];
@@ -68,13 +70,15 @@ function reproductorConocido(u) {
   return null;
 }
 
-async function analizarReproductor(r, original) {
-  const datos = { tipo: 'embed', embed: r.embed, fuente: original, sitio: { youtube: 'YouTube', vimeo: 'Vimeo', dailymotion: 'Dailymotion', drive: 'Google Drive' }[r.proveedor] || sitioDe(r.embed) };
+// Respuesta oEmbed (YouTube, Vimeo, Dailymotion): se leen solo estos campos
+interface OEmbed { title?: string; author_name?: string; duration?: number; description?: string; thumbnail_url?: string }
+async function analizarReproductor(r: Reproductor, original: string): Promise<InfoImportada> {
+  const datos: InfoImportada = { tipo: 'embed', embed: r.embed, fuente: original, sitio: { youtube: 'YouTube', vimeo: 'Vimeo', dailymotion: 'Dailymotion', drive: 'Google Drive' }[r.proveedor] || sitioDe(r.embed) };
   if (r.oembed) {
     const o = await pedir(r.oembed).catch(() => null);
     if (o && (o.status === 401 || o.status === 403)) throw new ErrorImportar(`El dueño de ese video no permite verlo en otras páginas (${datos.sitio} lo bloquea). Probá con otro link.`);
     if (o && o.status === 404) throw new ErrorImportar(`Ese video no existe o es privado en ${datos.sitio}.`);
-    const j = o?.ok ? await o.json().catch(() => null) : null;
+    const j = (o?.ok ? await o.json().catch(() => null) : null) as OEmbed | null;
     if (j) {
       datos.titulo = sinEtiquetas(j.title);
       datos.direccion = sinEtiquetas(j.author_name || '');
@@ -93,8 +97,8 @@ async function analizarReproductor(r, original) {
 }
 
 // StreamHG: su página no se deja mostrar dentro de otra; se usa su reproductor para insertar (/e/código)
-function codigoStreamHG(u) {
-  const extra = [process.env.STREAMHG_REPRODUCTOR, ...(process.env.STREAMHG_DOMINIOS || '').split(',')]
+function codigoStreamHG(u: URL): string | null {
+  const extra = [process.env.STREAMHG_REPRODUCTOR || '', ...(process.env.STREAMHG_DOMINIOS || '').split(',')]
     .map((d) => { try { return new URL(d.includes('//') ? d : `https://${d.trim()}`).hostname; } catch { return ''; } }).filter(Boolean);
   const h = u.hostname.replace(/^www\./, '');
   if (!/streamhg/i.test(h) && !extra.includes(h) && !extra.includes(u.hostname)) return null;
@@ -102,7 +106,7 @@ function codigoStreamHG(u) {
 }
 
 // ¿Se puede mostrar esta página dentro de Cinetream? (algunas lo prohíben)
-function permiteMostrarse(r) {
+function permiteMostrarse(r: Response): boolean {
   const xfo = (r.headers.get('x-frame-options') || '').toLowerCase();
   if (xfo.includes('deny') || xfo.includes('sameorigin')) return false;
   const fa = (r.headers.get('content-security-policy') || '').match(/frame-ancestors([^;]*)/i)?.[1]?.trim().toLowerCase();
@@ -111,7 +115,7 @@ function permiteMostrarse(r) {
 }
 
 /** ¿Sigue andando el reproductor de esta película? (para «Revisar links») */
-export async function revisarReproductor(embed) {
+export async function revisarReproductor(embed: string): Promise<{ ok: boolean; detalle: string }> {
   try {
     const u = new URL(embed);
     const r = reproductorConocido(u);
@@ -129,7 +133,7 @@ export async function revisarReproductor(embed) {
   }
 }
 
-async function pedir(url, opciones = {}, ms = 20000) {
+async function pedir(url: string, opciones: RequestInit & { headers?: Record<string, string> } = {}, ms = 20000): Promise<Response> {
   const control = new AbortController();
   const corte = setTimeout(() => control.abort(), ms);
   try {
@@ -142,24 +146,24 @@ async function pedir(url, opciones = {}, ms = 20000) {
   }
 }
 
-const sinEtiquetas = (t) => String(t || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ')
+const sinEtiquetas = (t: unknown) => String(t || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ')
   .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
   .replace(/\n{3,}/g, '\n\n').trim();
-const primero = (v) => (Array.isArray(v) ? v[0] : v);
-const titulo = (nombre) => decodeURIComponent(nombre).replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+const primero = (v: any) => (Array.isArray(v) ? v[0] : v);
+const titulo = (nombre: string) => decodeURIComponent(nombre).replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
 
 // Los temas de Internet Archive vienen en inglés y mezclados: se pasan a los géneros de Cinetream
-const GENEROS = {
+const GENEROS: Record<string, string> = {
   horror: 'Terror', 'silent film': 'Cine mudo', silent: 'Cine mudo', classic: 'Clásicos', 'classic film': 'Clásicos', comedy: 'Comedia',
   drama: 'Drama', 'science fiction': 'Ciencia ficción', 'sci-fi': 'Ciencia ficción', animation: 'Animación', cartoon: 'Animación',
   western: 'Western', documentary: 'Documental', 'film noir': 'Cine negro', noir: 'Cine negro', romance: 'Romance',
   adventure: 'Aventura', mystery: 'Misterio', thriller: 'Suspenso', war: 'Bélica', musical: 'Musical', fantasy: 'Fantasía',
   crime: 'Policial', family: 'Familia', action: 'Acción', 'short film': 'Cortometraje', short: 'Cortometraje',
 };
-const traducirGenero = (s) => GENEROS[String(s).trim().toLowerCase()] || null;
+const traducirGenero = (s: unknown): string | null => GENEROS[String(s).trim().toLowerCase()] || null;
 
 // ---------- Análisis del link ----------
-export async function analizar(url) {
+export async function analizar(url: string): Promise<InfoImportada> {
   const u = validarLink(url);
   const shg = codigoStreamHG(u);
   if (shg) return datosParaImportar(shg, u.href).catch((e) => { throw new ErrorImportar(e.message); });
@@ -183,21 +187,22 @@ export async function analizar(url) {
   throw new ErrorImportar('El link no lleva a un video ni a una página con video. Probá con el link directo al archivo (.mp4) o con una página de Internet Archive.');
 }
 
-async function leerTexto(r, limite) {
+async function leerTexto(r: Response, limite: number): Promise<string> {
   let texto = '';
   const decoder = new TextDecoder();
+  if (!r.body) return texto;
   for await (const parte of r.body) {
     texto += decoder.decode(parte, { stream: true });
-    if (texto.length > limite) { await r.body.cancel?.().catch(() => {}); break; }
+    if (texto.length > limite) { await r.body.cancel().catch(() => {}); break; }
   }
   return texto;
 }
 
 // Internet Archive: la API de metadatos da todo lo necesario
-async function analizarArchive(id) {
+async function analizarArchive(id: string): Promise<InfoImportada> {
   const r = await pedir(`${ARCHIVE}/metadata/${encodeURIComponent(id)}`);
   if (!r.ok) throw new ErrorImportar('Internet Archive no respondió. Probá de nuevo en un rato.');
-  const datos = await r.json();
+  const datos = (await r.json()) as { metadata?: Record<string, any>; files?: Record<string, any>[] }; // respuesta de la API de Internet Archive
   if (!datos?.metadata) throw new ErrorImportar('Ese elemento de Internet Archive no existe o no es público.');
   const m = datos.metadata;
   const archivos = datos.files || [];
@@ -226,7 +231,7 @@ async function analizarArchive(id) {
     direccion: sinEtiquetas([].concat(m.director || m.creator || []).join(', ')),
     sinopsis: sinEtiquetas(primero(m.description)).slice(0, 1200),
     duracionMin: segundos ? Math.round(segundos / 60) : 0,
-    generos: [...new Set([].concat(m.subject || []).flatMap((s) => String(s).split(/[;,]/)).map(traducirGenero).filter(Boolean))].slice(0, 3),
+    generos: [...new Set([].concat(m.subject || []).flatMap((s) => String(s).split(/[;,]/)).map(traducirGenero).filter((g): g is string => Boolean(g)))].slice(0, 3),
     licencia,
     tamano: Number(video.size) || null,
     formato: video.format || 'video',
@@ -234,7 +239,7 @@ async function analizarArchive(id) {
 }
 
 // Página web con etiquetas Open Graph
-function analizarPagina(u, html, mostrable) {
+function analizarPagina(u: URL, html: string, mostrable: boolean): InfoImportada {
   const meta = (prop) => {
     const re = new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]*>`, 'i');
     const etiqueta = html.match(re)?.[0];
@@ -260,7 +265,7 @@ function analizarPagina(u, html, mostrable) {
       return { src, puntos };
     });
     const candidatos = [{ src: absoluto(meta('twitter:player')), puntos: 4 }, { src: video, puntos: 4 }, ...marcos]
-      .filter((c) => c.src && /^https?:/i.test(c.src) && !PUBLICIDAD.test(c.src));
+      .filter((c): c is { src: string; puntos: number } => Boolean(c.src && /^https?:/i.test(c.src) && !PUBLICIDAD.test(c.src)));
     for (const c of candidatos) {
       const conocido = reproductorConocido(new URL(c.src));
       if (conocido) return { ...datosPagina, tipo: 'embed', embed: conocido.embed, sitio: sitioDe(conocido.embed) };
@@ -276,7 +281,7 @@ function analizarPagina(u, html, mostrable) {
     fuente: u.href,
     video,
     portada: absoluto(meta('og:image')),
-    titulo: sinEtiquetas(meta('og:title') || html.match(/<title>([^<]*)<\/title>/i)?.[1] || titulo(new URL(video).pathname.split('/').pop())),
+    titulo: sinEtiquetas(meta('og:title') || html.match(/<title>([^<]*)<\/title>/i)?.[1] || titulo(new URL(video).pathname.split('/').pop() || 'Película')),
     sinopsis: sinEtiquetas(meta('og:description') || meta('description') || '').slice(0, 1200),
     formato: 'video',
   };
@@ -284,7 +289,8 @@ function analizarPagina(u, html, mostrable) {
 
 // ---------- Descarga ----------
 // Descarga a un archivo .parcial y lo renombra al terminar: un corte nunca deja un video roto en el catálogo
-export async function descargar(url, destino, { alProgreso, tipos = ['video/', 'application/octet-stream'], maxBytes = 50 * 1024 ** 3, senal } = {}) {
+export async function descargar(url: string, destino: string, { alProgreso, tipos = ['video/', 'application/octet-stream'], maxBytes = 50 * 1024 ** 3, senal }:
+  { alProgreso?: (bytes: number, total: number) => void; tipos?: string[]; maxBytes?: number; senal?: AbortSignal } = {}): Promise<{ tipo: string; bytes: number }> {
   validarLink(url);
   const r = await fetch(url, { redirect: 'follow', signal: senal, headers: { 'User-Agent': 'Cinetream/0.3' } }).catch((e) => {
     throw new ErrorImportar(e.name === 'AbortError' ? 'Descarga cancelada.' : 'No se pudo conectar para descargar.');
@@ -300,7 +306,7 @@ export async function descargar(url, destino, { alProgreso, tipos = ['video/', '
   const archivo = createWriteStream(parcial);
   let bytes = 0;
   try {
-    for await (const parte of r.body) {
+    for await (const parte of r.body ?? []) {
       bytes += parte.length;
       if (bytes > maxBytes) throw new ErrorImportar('El archivo es demasiado grande.');
       if (!archivo.write(parte)) await once(archivo, 'drain');
