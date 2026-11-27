@@ -6,6 +6,7 @@ import {
 import { cancelarEnMercadoPago, consultarSuscripcion, crearSuscripcion, firmaValida, modoPrueba } from './pagos.js';
 import { campanasVigentes, registrarEvento } from './publicidad.js';
 import { ipCliente } from './red.js';
+import { cortar, empezar, latido, pantallasActivas, terminar } from './pantallas.js';
 
 const DIA = 86400000;
 const fallos = new Map(); // ip → { n, desde }: freno a quien prueba contraseñas
@@ -141,6 +142,13 @@ export async function rutasCuenta(req, res, url) {
       activarPlan(cuenta, planId, { pago: { estado: 'autorizada' } });
       return json(res, 200, { cuenta: datosPublicos(cuenta) });
     }
+    // ---------- Pantallas a la vez ----------
+    if (ruta === '/api/pantallas' && req.method === 'GET') return json(res, 200, { pantallas: pantallasActivas(cuenta) });
+    if (ruta === '/api/pantallas/empezar' && req.method === 'POST') return json(res, 200, empezar(cuenta, await leerJSON(req, 2000)));
+    if (ruta === '/api/pantallas/latido' && req.method === 'POST') return json(res, 200, latido(cuenta, (await leerJSON(req, 2000)).dispositivo));
+    if (ruta === '/api/pantallas/terminar' && req.method === 'POST') { terminar(cuenta, (await leerJSON(req, 2000)).dispositivo); return json(res, 200, { ok: true }); }
+    if (ruta === '/api/pantallas/cortar' && req.method === 'POST') return json(res, 200, { ok: cortar(cuenta, (await leerJSON(req, 2000)).dispositivo) });
+
     if (ruta === '/api/cuenta/cancelar' && req.method === 'POST') {
       await cancelarEnMercadoPago(cuenta.pago?.id).catch(() => {});
       cancelarPlan(cuenta);

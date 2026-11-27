@@ -19,11 +19,16 @@ const PLANES_INICIALES = [
   { id: 'plus', nombre: 'Plus', precio: 2999, periodo: 'mes', anuncios: false, plus: true, descripcion: 'Sin publicidad y con los títulos Plus.' },
   { id: 'plus-anual', nombre: 'Plus anual', precio: 29990, periodo: 'año', anuncios: false, plus: true, descripcion: 'Lo mismo que Plus, pagando una vez al año: dos meses de regalo.' },
 ];
-let planes = existsSync(ARCHIVO_PLANES) ? JSON.parse(readFileSync(ARCHIVO_PLANES, 'utf8')) : PLANES_INICIALES;
+// Pantallas a la vez de cada plan (los planes guardados antes de existir este dato toman estos valores)
+const PANTALLAS_INICIALES = { gratis: 1, plus: 2, 'plus-anual': 2 };
+const limitarPantallas = (n) => Math.min(Math.max(Math.round(Number(n)) || 1, 1), 10);
+export const pantallasDe = (plan) => limitarPantallas(plan?.pantallas ?? PANTALLAS_INICIALES[plan?.id] ?? 1);
+let planes = (existsSync(ARCHIVO_PLANES) ? JSON.parse(readFileSync(ARCHIVO_PLANES, 'utf8')) : PLANES_INICIALES)
+  .map((p) => ({ ...p, pantallas: pantallasDe(p) }));
 export const listaPlanes = () => planes;
 export const buscarPlan = (id) => planes.find((p) => p.id === id);
 export async function guardarPlanes(nuevos) {
-  // Solo se cambian nombre, precio, descripción y si está a la venta; los beneficios de cada plan son fijos
+  // Solo se cambian nombre, precio, descripción, pantallas a la vez y si está a la venta; los demás beneficios son fijos
   planes = planes.map((p) => {
     const n = nuevos.find((x) => x.id === p.id) || {};
     return {
@@ -32,6 +37,7 @@ export async function guardarPlanes(nuevos) {
       precio: p.id === 'gratis' ? 0 : Math.max(0, Math.round(Number(n.precio ?? p.precio)) || 0),
       descripcion: String(n.descripcion ?? p.descripcion).trim().slice(0, 200),
       oculto: p.id === 'gratis' ? false : Boolean(n.oculto),
+      pantallas: limitarPantallas(n.pantallas ?? p.pantallas),
     };
   });
   await writeFile(ARCHIVO_PLANES, JSON.stringify(planes, null, 2));
@@ -113,7 +119,7 @@ export function datosPublicos(cuenta) {
   const plan = planEfectivo(cuenta);
   return {
     email: cuenta.email, nombre: cuenta.nombre, plan: plan.id, planNombre: plan.nombre,
-    anuncios: plan.anuncios, plus: plan.plus, estado: cuenta.estado, vence: plan.id === 'gratis' ? null : cuenta.vence,
+    anuncios: plan.anuncios, plus: plan.plus, pantallas: pantallasDe(plan), estado: cuenta.estado, vence: plan.id === 'gratis' ? null : cuenta.vence,
     planContratado: cuenta.plan, pendiente: cuenta.pago?.estado === 'pendiente' ? cuenta.pago.plan : null,
   };
 }

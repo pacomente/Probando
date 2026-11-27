@@ -110,7 +110,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(204, SEGURIDAD);
       return res.end();
     }
-    if (/^\/api\/(cuenta|planes|anuncios|pagos)(\/|$)/.test(url.pathname)) return await rutasCuenta(req, res, url);
+    if (/^\/api\/(cuenta|planes|anuncios|pagos|pantallas)(\/|$)/.test(url.pathname)) return await rutasCuenta(req, res, url);
     if (url.pathname.startsWith('/anuncios/')) {
       const archivo = dentroDe(CARPETA_PIEZAS, url.pathname.slice('/anuncios/'.length));
       if (!archivo) { res.writeHead(403, SEGURIDAD); return res.end(); }

@@ -21,6 +21,7 @@ import {
   archivos as archivosStreamHG, cuenta as cuentaStreamHG, datosParaImportar, ErrorStreamHG, revisarStreamHG,
   streamhgConfigurado, subidasPendientes, subirPorLink,
 } from './streamhg.js';
+import { resumenPantallas } from './pantallas.js';
 import { estadoEnlace, guardarEnlace, olvidarPelicula, revisarEnlace, vistas, vistasPorDia } from './estadisticas.js';
 
 const HORAS_SESION = 12;
@@ -501,6 +502,7 @@ export async function rutasAdmin(req, res, url) {
         ingresoMensual: Math.round(mensual), publicidad: stats, campanasActivas: campanas().filter((c) => c.activa).length,
         planes: listaPlanes(), modoPrueba: modoPrueba(),
         vistasPorDia: vistasPorDia(30),
+        viendoAhora: resumenPantallas(),
         masVistas: todas().map((p) => ({ id: p.id, titulo: p.titulo, anio: p.anio, ...vistas(p.id) }))
           .filter((p) => p.recientes > 0).sort((a, b) => b.recientes - a.recientes).slice(0, 5),
         disco: await disco(),
@@ -517,10 +519,12 @@ export async function rutasAdmin(req, res, url) {
 
     // ---------- Suscriptores ----------
     if (ruta === '/cuentas') {
+      const viendo = resumenPantallas().porCuenta;
       return json(res, 200, {
         cuentas: todasLasCuentas().map((c) => ({
           id: c.id, email: c.email, nombre: c.nombre, alta: c.alta, plan: c.plan, estado: c.estado, vence: c.vence,
           planEfectivo: planEfectivo(c).id, pago: c.pago ? { proveedor: c.pago.proveedor, estado: c.pago.estado } : null,
+          viendo: viendo[c.id] || 0,
         })),
       });
     }

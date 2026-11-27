@@ -185,6 +185,19 @@ Nombres, precios y descripciones se cambian en **Administrador → Planes y pago
   un candado y la invitación a pasarse a Plus; el servidor no les entrega el video.
 - **Cancelar**: desde Perfil → Ajustes. El plan sigue hasta el último día pago y después pasa solo a Gratis.
 
+### Pantallas a la vez
+
+Cada plan define en cuántos equipos se puede ver **al mismo tiempo** con una cuenta (al empezar: Gratis 1, Plus 2,
+Plus anual 2; se cambia en **Planes y pagos → Pantallas a la vez**, de 1 a 10).
+
+- Al dar play, Cinetream anota ese equipo (tele, celular, compu). Mientras se ve, el equipo avisa cada 30 segundos.
+- Si la cuenta ya está en el límite, aparece **«Ya se está viendo en otra pantalla»** con la lista de equipos que están
+  mirando (qué película y desde cuándo) y el botón **Cortar ahí y ver acá**. En el plan Gratis también ofrece pasarse a Plus.
+- El equipo cortado cierra la película solo, con el aviso «Se empezó a ver en otro equipo con tu cuenta».
+- Si un equipo se apaga o pierde internet, deja de contar al minuto y medio.
+- En el administrador, **Resumen** muestra cuántas pantallas están viendo ahora y **Suscriptores** marca qué cuentas
+  están mirando y en cuántas pantallas.
+
 ### Cobrar con Mercado Pago
 
 Mientras no se configure, Cinetream funciona en **modo prueba**: el pago se simula en una página y nadie paga de verdad.
@@ -324,6 +337,7 @@ Esto es la plataforma (la parte que ve el público). Para venderla como servicio
 | `importar.js` | Análisis de links (Internet Archive, archivo directo, página con video) y descargas. |
 | `datos.js` | Catálogo y contraseña guardados en `datos/`. |
 | `estadisticas.js` | Reproducciones por película y estado de los links. |
+| `pantallas.js` · `public/pantallas.js` | Límite de pantallas a la vez: pedir lugar, señal mientras se ve y cortar en otro equipo. |
 | `streamhg.js` | Tu cuenta de StreamHG: lista de videos, datos, subida por link y reproductor para insertar. |
 | `r2.js` | Videos en Cloudflare R2: firma de pedidos (compatible con S3), subidas por partes y links firmados. |
 | `red.js` | IP del visitante y pedidos locales, también detrás del proxy de Render. |
