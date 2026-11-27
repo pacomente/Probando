@@ -1,6 +1,6 @@
 // Guarda la plataforma en el dispositivo: se abre al instante y el catálogo se ve aunque se corte internet.
 // Los videos no se guardan (son pesados): necesitan conexión.
-const VERSION = 'cinetream-v7';
+const VERSION = 'cinetream-v8';
 const APP = ['./', 'index.html', 'estilos.css', 'app.js', 'catalogo.js', 'carteles.js', 'navegacion.js', 'reproductor.js', 'cuenta.js', 'anuncios.js', 'app-nativa.js', 'pantallas.js',
   'manifest.webmanifest', 'icono.svg', 'icono-192.png', 'icono-512.png'];
 

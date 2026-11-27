@@ -1,14 +1,11 @@
 // Cuentas de espectadores, planes de suscripción y vinculación de la tele con un código.
 // Las sesiones van en una cookie firmada (HMAC): sobreviven a un reinicio del servidor sin guardar sesiones.
+// Todo se guarda en la base de datos (base.js): una fila por cuenta, con el correo como índice único.
 import crypto from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { rename, writeFile } from 'node:fs/promises';
+import { existsSync, readFileSync, renameSync } from 'node:fs';
 import path from 'node:path';
-import { CARPETA_DATOS } from './datos.js';
+import { CARPETA_DATOS, coleccion, documento } from './base.js';
 
-const ARCHIVO_CUENTAS = path.join(CARPETA_DATOS, 'cuentas.json');
-const ARCHIVO_PLANES = path.join(CARPETA_DATOS, 'planes.json');
-const ARCHIVO_SECRETO = path.join(CARPETA_DATOS, 'secreto');
 const DIAS_SESION = 60;
 const DIA = 86400000;
 
@@ -23,8 +20,8 @@ const PLANES_INICIALES = [
 const PANTALLAS_INICIALES = { gratis: 1, plus: 2, 'plus-anual': 2 };
 const limitarPantallas = (n) => Math.min(Math.max(Math.round(Number(n)) || 1, 1), 10);
 export const pantallasDe = (plan) => limitarPantallas(plan?.pantallas ?? PANTALLAS_INICIALES[plan?.id] ?? 1);
-let planes = (existsSync(ARCHIVO_PLANES) ? JSON.parse(readFileSync(ARCHIVO_PLANES, 'utf8')) : PLANES_INICIALES)
-  .map((p) => ({ ...p, pantallas: pantallasDe(p) }));
+const docPlanes = documento('planes', { migrarDe: { archivo: 'planes.json' }, inicial: () => PLANES_INICIALES });
+let planes = docPlanes.leer().map((p) => ({ ...p, pantallas: pantallasDe(p) }));
 export const listaPlanes = () => planes;
 export const buscarPlan = (id) => planes.find((p) => p.id === id);
 export async function guardarPlanes(nuevos) {
@@ -40,20 +37,19 @@ export async function guardarPlanes(nuevos) {
       pantallas: limitarPantallas(n.pantallas ?? p.pantallas),
     };
   });
-  await writeFile(ARCHIVO_PLANES, JSON.stringify(planes, null, 2));
+  docPlanes.guardar(planes);
   return planes;
 }
 
 // ---------- Cuentas ----------
-let cuentas = existsSync(ARCHIVO_CUENTAS) ? JSON.parse(readFileSync(ARCHIVO_CUENTAS, 'utf8')) : [];
-let escribiendo = Promise.resolve();
+const tablaCuentas = coleccion('cuentas', {
+  indices: [{ campo: 'email', unico: true }, { campo: 'plan' }],
+  migrarDe: { archivo: 'cuentas.json', extraer: (x) => x },
+});
+let cuentas = [...tablaCuentas.todos()];
 export function guardarCuentas() {
-  const copia = JSON.stringify(cuentas);
-  escribiendo = escribiendo.then(async () => {
-    await writeFile(`${ARCHIVO_CUENTAS}.tmp`, copia, { mode: 0o600 });
-    await rename(`${ARCHIVO_CUENTAS}.tmp`, ARCHIVO_CUENTAS);
-  }).catch((e) => console.error('No se pudieron guardar las cuentas:', e.message));
-  return escribiendo;
+  try { tablaCuentas.guardar(cuentas); } catch (e) { console.error('No se pudieron guardar las cuentas:', e.message); }
+  return Promise.resolve();
 }
 
 export const todasLasCuentas = () => cuentas;
@@ -77,6 +73,37 @@ export function crearCuenta(email, clave, nombre) {
   return cuenta;
 }
 
+export const buscarPorCorreo = (email) => cuentas.find((c) => c.email === normalizarCorreo(email));
+
+// ---------- Olvidé mi contraseña ----------
+// Se guarda solo el hash del link: aunque alguien lea cuentas.json no puede usarlo
+const sha256 = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
+export function crearRestablecimiento(cuenta, horas = 1) {
+  const token = crypto.randomBytes(32).toString('base64url');
+  cuenta.restablecer = { hash: sha256(token), vence: Date.now() + horas * 3600000 };
+  guardarCuentas();
+  return token;
+}
+export function restablecerClave(token, clave) {
+  if (typeof clave !== 'string' || clave.length < 8) throw new Error('La contraseña tiene que tener al menos 8 caracteres.');
+  const h = Buffer.from(sha256(token || ''));
+  const cuenta = cuentas.find((c) => c.restablecer && c.restablecer.vence > Date.now()
+    && crypto.timingSafeEqual(Buffer.from(c.restablecer.hash), h));
+  if (!cuenta) throw new Error('Este link ya venció o ya se usó. Pedí uno nuevo.');
+  cuenta.sal = crypto.randomBytes(16).toString('hex');
+  cuenta.hash = crypto.scryptSync(clave, cuenta.sal, 64).toString('hex');
+  delete cuenta.restablecer;
+  cuenta.version = (cuenta.version || 0) + 1; // se cierran las sesiones abiertas en otros equipos
+  guardarCuentas();
+  return cuenta;
+}
+
+/** Borra la cuenta y sus datos (derecho de supresión, Ley 25.326). */
+export function eliminarCuenta(cuenta) {
+  cuentas = cuentas.filter((c) => c.id !== cuenta.id);
+  guardarCuentas();
+}
+
 export function verificarCuenta(email, clave) {
   const cuenta = cuentas.find((c) => c.email === normalizarCorreo(email));
   // Se calcula igual aunque no exista, para no revelar qué correos tienen cuenta por el tiempo de respuesta
@@ -98,6 +125,8 @@ export function planEfectivo(cuenta) {
 
 // Activa un plan pago hasta una fecha (lo llaman el pago aprobado o el administrador)
 export function activarPlan(cuenta, planId, { vence, pago } = {}) {
+  // Fecha de contratación: cuenta para el plazo del botón de arrepentimiento (10 días)
+  if (planId !== 'gratis' && planEfectivo(cuenta).id !== planId) cuenta.contratado = Date.now();
   const plan = buscarPlan(planId);
   if (!plan) throw new Error('Ese plan no existe.');
   cuenta.plan = plan.id;
@@ -125,13 +154,19 @@ export function datosPublicos(cuenta) {
 }
 
 // ---------- Sesiones firmadas ----------
-let secreto;
-if (existsSync(ARCHIVO_SECRETO)) secreto = readFileSync(ARCHIVO_SECRETO, 'utf8').trim();
-else { secreto = crypto.randomBytes(32).toString('hex'); writeFileSync(ARCHIVO_SECRETO, secreto, { mode: 0o600 }); }
+// Clave con la que se firman las sesiones (en la base, así un respaldo restaurado no cierra la sesión de todos)
+const docSecreto = documento('secreto');
+let secreto = docSecreto.leer();
+if (!secreto) {
+  const viejo = path.join(CARPETA_DATOS, 'secreto');
+  if (existsSync(viejo)) { secreto = readFileSync(viejo, 'utf8').trim(); renameSync(viejo, `${viejo}.migrado`); } else secreto = crypto.randomBytes(32).toString('hex');
+  docSecreto.guardar(secreto);
+}
 const firmar = (texto) => crypto.createHmac('sha256', secreto).update(texto).digest('base64url');
 
 export function crearToken(cuenta) {
-  const cuerpo = Buffer.from(JSON.stringify({ c: cuenta.id, e: Date.now() + DIAS_SESION * DIA })).toString('base64url');
+  // «v»: al cambiar la contraseña sube la versión y las sesiones viejas dejan de valer
+  const cuerpo = Buffer.from(JSON.stringify({ c: cuenta.id, e: Date.now() + DIAS_SESION * DIA, v: cuenta.version || 0 })).toString('base64url');
   return `${cuerpo}.${firmar(cuerpo)}`;
 }
 
@@ -142,8 +177,9 @@ export function cuentaDeToken(token) {
   const recibida = Buffer.from(firma);
   if (esperada.length !== recibida.length || !crypto.timingSafeEqual(esperada, recibida)) return null;
   try {
-    const { c, e } = JSON.parse(Buffer.from(cuerpo, 'base64url').toString('utf8'));
-    return e > Date.now() ? buscarCuenta(c) : null;
+    const { c, e, v } = JSON.parse(Buffer.from(cuerpo, 'base64url').toString('utf8'));
+    const cuenta = e > Date.now() ? buscarCuenta(c) : null;
+    return cuenta && (cuenta.version || 0) === (v || 0) ? cuenta : null;
   } catch { return null; }
 }
 

@@ -48,6 +48,11 @@ services:
         sync: false
       - key: R2_BUCKET
         sync: false
+      # Opcional: correos para «¿Olvidaste tu contraseña?» (cuenta gratis en resend.com)
+      - key: RESEND_API_KEY
+        sync: false
+      - key: CORREO_REMITENTE
+        sync: false
       # Opcional: tu cuenta de StreamHG (API key)
       - key: STREAMHG_CLAVE
         sync: false

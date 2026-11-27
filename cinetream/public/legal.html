@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cinetream · Información legal</title>
+  <meta name="theme-color" content="#0b0c11">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=Figtree:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body class="pagina-simple">
+  <main class="documento-legal" id="doc">
+    <span class="logo"><span class="logo-marca">CINE</span><span class="logo-sub">TREAM</span></span>
+    <p>Cargando…</p>
+  </main>
+  <script type="module">
+    const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const doc = new URLSearchParams(location.search).get('doc') === 'privacidad' ? 'privacidad' : 'terminos';
+    const [l, planes] = await Promise.all([
+      fetch('/api/legal').then((r) => r.json()).catch(() => ({})),
+      fetch('/api/planes').then((r) => r.json()).catch(() => ({ planes: [] })),
+    ]);
+    const falta = '<b>[completar en Administrador → Ajustes → Datos legales]</b>';
+    const v = (campo) => (l[campo] ? `<b>${esc(l[campo])}</b>` : falta);
+    const fecha = l.actualizado ? new Date(l.actualizado).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+    const titular = `${v('titular')} (CUIT ${v('cuit')}), con domicilio en ${v('domicilio')}`;
+    const contacto = l.correo ? `<a href="mailto:${esc(l.correo)}">${esc(l.correo)}</a>` : falta;
+    const precio = (p) => (p.precio ? `$ ${Number(p.precio).toLocaleString('es-AR')} por ${p.periodo}` : 'sin cargo');
+    const listaPlanes = (planes.planes || []).map((p) => `<li><b>${esc(p.nombre)}</b>: ${esc(precio(p))}. ${esc(p.descripcion)} Hasta ${p.pantallas || 1} ${p.pantallas > 1 ? 'pantallas' : 'pantalla'} a la vez.</li>`).join('');
+    const incompleto = !(l.titular && l.cuit && l.correo) ? '<p class="aviso-incompleto">Faltan los datos del titular del servicio. El administrador los completa en Ajustes → Datos legales.</p>' : '';
+    const pie = `<p class="pie-legal" style="justify-content:flex-start"><a href="legal.html?doc=terminos">Términos y condiciones</a><a href="legal.html?doc=privacidad">Privacidad</a>
+      <a href="tramites.html?tipo=baja">Botón de baja</a><a href="tramites.html?tipo=arrepentimiento">Botón de arrepentimiento</a><a href="./">Volver a Cinetream</a></p>`;
+
+    const TERMINOS = `
+      <h1>Términos y condiciones</h1><p>Última actualización: ${fecha}</p>${incompleto}
+      <h2>1. Quién presta el servicio</h2>
+      <p>Cinetream es un servicio de películas por internet prestado por ${titular}. Contacto: ${contacto}${l.telefono ? ` · ${esc(l.telefono)}` : ''}.</p>
+      <h2>2. La cuenta</h2>
+      <p>Para usar Cinetream hay que crear una cuenta con un correo y una contraseña. Sos responsable de cuidar tu contraseña.
+        La cuenta es personal y se puede usar en la cantidad de pantallas a la vez que incluye tu plan.</p>
+      <h2>3. Planes y precios</h2>
+      <ul>${listaPlanes || '<li>Los planes vigentes se muestran al crear la cuenta.</li>'}</ul>
+      <p>Los precios están en pesos argentinos e incluyen impuestos. Si un precio cambia, se avisa antes de la próxima renovación y vale desde ella.</p>
+      <h2>4. Pagos y renovación</h2>
+      <p>Los planes pagos se cobran por adelantado con Mercado Pago y se renuevan solos al final de cada período (mes o año) hasta que los des de baja.
+        Cinetream no guarda los datos de tu tarjeta: los procesa Mercado Pago.</p>
+      <h2>5. Baja</h2>
+      <p>Podés dar de baja tu suscripción cuando quieras, en un paso, desde el <a href="tramites.html?tipo=baja">Botón de baja</a> o desde Perfil → Ajustes.
+        Se deja de renovar y seguís con tu plan hasta el último día pagado. Recibís un código de trámite como constancia.</p>
+      <h2>6. Botón de arrepentimiento</h2>
+      <p>Dentro de los <b>10 días corridos</b> desde que contrataste un plan pago podés revocar la contratación sin dar motivos con el
+        <a href="tramites.html?tipo=arrepentimiento">Botón de arrepentimiento</a>. El plan se cancela en el momento y te devolvemos el dinero
+        por el mismo medio de pago (artículo 34 de la Ley 24.240 y Resolución 424/2020).</p>
+      <h2>7. Contenido</h2>
+      <p>Las películas se ofrecen para verlas dentro de Cinetream, para uso personal y no comercial. No está permitido descargarlas,
+        copiarlas, retransmitirlas ni mostrarlas en público. El catálogo puede cambiar. Algunos títulos son solo para el plan Plus.</p>
+      <h2>8. Publicidad</h2>
+      <p>El plan Gratis muestra publicidad antes de algunas películas y en la pantalla de inicio. Los planes Plus no tienen publicidad.
+        Nunca se muestra publicidad en perfiles infantiles.</p>
+      <h2>9. Uso correcto</h2>
+      <p>No está permitido usar Cinetream para actividades ilegales, intentar acceder a cuentas ajenas, saltear el límite de pantallas
+        ni afectar el funcionamiento del servicio. En esos casos la cuenta puede suspenderse.</p>
+      <h2>10. Disponibilidad</h2>
+      <p>Hacemos lo posible para que Cinetream funcione siempre, pero puede haber interrupciones por mantenimiento o por causas ajenas
+        (por ejemplo, la conexión a internet o los sitios de donde vienen algunos videos).</p>
+      <h2>11. Datos personales</h2>
+      <p>Cómo usamos tus datos está explicado en la <a href="legal.html?doc=privacidad">Política de privacidad</a>.</p>
+      <h2>12. Cambios en estos términos</h2>
+      <p>Si cambian, se publica la nueva versión con su fecha y se avisa a las cuentas con plan pago antes de que empiece a regir.</p>
+      <h2>13. Ley aplicable y reclamos</h2>
+      <p>Se aplica la ley argentina, en especial la Ley 24.240 de Defensa del Consumidor. Para reclamos, escribinos a ${contacto}.
+        También podés hacer tu reclamo en <a href="https://www.argentina.gob.ar/produccion/defensadelconsumidor/formulario" rel="noopener">Defensa del Consumidor</a>.
+        Son competentes los tribunales de ${v('jurisdiccion')}, sin perjuicio del derecho del consumidor a reclamar en su domicilio.</p>
+      ${pie}`;
+
+    const PRIVACIDAD = `
+      <h1>Política de privacidad</h1><p>Última actualización: ${fecha}</p>${incompleto}
+      <h2>1. Responsable</h2>
+      <p>El responsable de tus datos es ${titular}. Contacto: ${contacto}.</p>
+      <h2>2. Qué datos guardamos</h2>
+      <ul>
+        <li><b>Cuenta:</b> correo, nombre (si lo cargás) y contraseña. La contraseña se guarda cifrada: nadie puede leerla, ni siquiera nosotros.</li>
+        <li><b>Plan y pagos:</b> plan contratado, fechas y el número de operación de Mercado Pago. No guardamos datos de tarjetas.</li>
+        <li><b>Uso:</b> qué películas se reproducen (para «Seguir viendo» y las estadísticas) y qué equipos están mirando en el momento (para el límite de pantallas).</li>
+        <li><b>Perfiles, Mi lista y por dónde ibas:</b> se guardan en tu propio equipo.</li>
+      </ul>
+      <h2>3. Para qué los usamos</h2>
+      <p>Para darte acceso, cobrar tu plan, recordar por dónde ibas, mostrar publicidad en el plan Gratis, mejorar el catálogo y atender tus consultas.
+        No vendemos tus datos.</p>
+      <h2>4. Con quién los compartimos</h2>
+      <p>Solo con los servicios que hacen funcionar Cinetream: Mercado Pago (cobros), el servidor donde está alojado Cinetream y,
+        si se usan, los servicios de video (por ejemplo Cloudflare o StreamHG) y de envío de correos. Cada uno los usa solo para prestar ese servicio.</p>
+      <h2>5. Cookies</h2>
+      <p>Usamos una cookie para mantener tu sesión abierta. No usamos cookies de seguimiento de terceros.</p>
+      <h2>6. Tus derechos</h2>
+      <p>Podés pedir acceso, corrección o eliminación de tus datos escribiendo a ${contacto}. Para borrar tu cuenta y tus datos en el momento,
+        usá <a href="tramites.html?tipo=eliminar">Eliminar mi cuenta</a>. El acceso a tus datos es gratuito cada 6 meses, salvo un interés legítimo (Ley 25.326).</p>
+      <p><b>La AGENCIA DE ACCESO A LA INFORMACIÓN PÚBLICA</b>, en su carácter de Órgano de Control de la Ley N° 25.326, tiene la atribución
+        de atender las denuncias y reclamos que interpongan quienes resulten afectados en sus derechos por incumplimiento de las normas vigentes
+        en materia de protección de datos personales.</p>
+      <h2>7. Seguridad y conservación</h2>
+      <p>Los datos viajan cifrados (https) y se guardan en una base de datos con copias de seguridad. Si eliminás tu cuenta, se borran tus datos;
+        guardamos solo el registro del trámite y lo que la ley obliga a conservar (por ejemplo, datos de facturación).</p>
+      ${pie}`;
+
+    document.getElementById('doc').innerHTML = `<span class="logo"><span class="logo-marca">CINE</span><span class="logo-sub">TREAM</span></span>${doc === 'privacidad' ? PRIVACIDAD : TERMINOS}`;
+    document.title = `Cinetream · ${doc === 'privacidad' ? 'Política de privacidad' : 'Términos y condiciones'}`;
+  </script>
+</body>
+</html>

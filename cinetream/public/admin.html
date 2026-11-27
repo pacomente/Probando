@@ -194,6 +194,17 @@
         </div>
         <p class="nota">Desde acá podés dar o quitar un plan a mano (por ejemplo, si alguien pagó por transferencia o para una cortesía).</p>
         <div class="tabla-envoltura"><table class="tabla-admin" id="cuentas-tabla"></table></div>
+        <div class="link-clave" id="link-clave" hidden>
+          <p class="nota"><b>Link para crear una contraseña nueva</b> para <span id="link-clave-email"></span>. Vale por 24 horas y sirve una sola vez:
+            mandáselo por WhatsApp o correo.</p>
+          <div class="buscar-link"><input id="link-clave-url" readonly aria-label="Link para la contraseña nueva"><button class="btn principal" id="link-clave-copiar">Copiar</button></div>
+        </div>
+      </section>
+      <section class="tarjeta-panel">
+        <div class="panel-titulo"><h2>Trámites</h2><span class="nota" id="tramites-resumen"></span></div>
+        <p class="nota">Bajas, arrepentimientos y cuentas eliminadas por los usuarios. En un <b>arrepentimiento</b> hay que devolver el dinero
+          desde Mercado Pago (Actividad → el pago → Devolver) y después marcarlo como resuelto.</p>
+        <div class="tabla-envoltura"><table class="tabla-admin" id="tramites-tabla"></table></div>
       </section>
     </div>
 
@@ -268,6 +279,35 @@
             <li>Opcional: si tus videos se ven con otra dirección de reproductor, agregá <code>STREAMHG_REPRODUCTOR</code> con esa dirección (por ejemplo <code>https://reproductor.com</code>).</li>
           </ol>
         </details>
+      </section>
+      <section class="tarjeta-panel">
+        <div class="panel-titulo"><h2>Datos legales</h2><span class="estado" id="legal-estado"></span></div>
+        <p class="nota">Aparecen en los <a href="legal.html?doc=terminos" target="_blank">Términos y condiciones</a>, la
+          <a href="legal.html?doc=privacidad" target="_blank">Política de privacidad</a> y los botones de baja y de arrepentimiento, que la ley pide para cobrar
+          suscripciones en Argentina. Los textos son un modelo: conviene que los revise un abogado o tu contador.</p>
+        <form class="plan-admin" id="legal-form">
+          <label>Titular (nombre o razón social)<input name="titular" maxlength="200" placeholder="Ej.: Juan Pérez"></label>
+          <label>CUIT<input name="cuit" maxlength="20" placeholder="20-12345678-9"></label>
+          <label class="ancho">Domicilio<input name="domicilio" maxlength="200" placeholder="Calle 123, Ciudad, Provincia"></label>
+          <label>Correo de contacto<input name="correo" type="email" maxlength="200" placeholder="contacto@tudominio.com"></label>
+          <label>Teléfono (opcional)<input name="telefono" maxlength="60"></label>
+          <label class="ancho">Tribunales competentes<input name="jurisdiccion" maxlength="200"></label>
+          <div class="acciones ancho"><button class="btn principal">Guardar datos legales</button></div>
+        </form>
+        <p class="nota" id="correo-estado"></p>
+      </section>
+      <section class="tarjeta-panel">
+        <div class="panel-titulo"><h2>Base de datos y copias de seguridad</h2><span class="estado estado-publicada">SQLite</span></div>
+        <p class="nota">Cuentas, catálogo, planes, publicidad, trámites y estadísticas están en una base de datos (<code>datos/cinetream.db</code>).
+          Todos los días se hace una copia automática (se guardan las últimas 14). Las copias incluyen las contraseñas cifradas: guardalas en un lugar seguro.</p>
+        <div id="base-datos"></div>
+        <div class="acciones">
+          <button class="btn principal" id="respaldo-ahora">Hacer una copia ahora</button>
+          <label class="btn">Restaurar una copia…<input type="file" id="respaldo-subir" accept=".db" hidden></label>
+        </div>
+        <p class="aviso-prueba" id="restauracion-pendiente" hidden><b>Restauración lista:</b> la copia se aplica cuando se reinicie Cinetream
+          (en Render: Manual Deploy → Restart service). Antes se guarda una copia de lo que hay ahora.</p>
+        <ul class="campanas" id="respaldos"></ul>
       </section>
       <section class="tarjeta-panel">
         <h2>Contraseña del administrador</h2>

@@ -312,6 +312,7 @@ let portadaActual = null;
 let tvTocada = false; // en la tele, una vez que se navega, la portada sigue al foco y deja de rotar sola
 
 function pintarInicio() {
+  $('#pie-inicio').hidden = !conServidor;
   const lista = catalogo();
   const destacadas = lista.filter((p) => p.destacada);
   destacadaActual %= Math.max(1, destacadas.length);
@@ -554,6 +555,7 @@ function pintarAjustes() {
   $('#ajustes-app').hidden = !enApp;
   if (enApp) pintarConexion($('#ajustes-app'), { enfocar });
   $('#ajustes-descargar').hidden = enApp || !conServidor;
+  $('#ajustes-legal').hidden = !conServidor;
   const c = cuenta();
   $('#ajustes-cuenta').hidden = !c;
   if (c) {

@@ -764,7 +764,31 @@ async function cargarNegocio() {
 
 // ---------- Suscriptores ----------
 let cuentasLista = [];
+$('#link-clave-copiar').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('#link-clave-url').value); avisar('Link copiado'); } catch { $('#link-clave-url').select(); }
+});
+
+// ---------- Trámites (baja, arrepentimiento, eliminación) ----------
+async function cargarTramites() {
+  const { tramites } = await api('/tramites');
+  const NOMBRES = { baja: 'Baja', arrepentimiento: 'Arrepentimiento', eliminacion: 'Cuenta eliminada' };
+  const pendientes = tramites.filter((t) => t.estado !== 'resuelto').length;
+  $('#tramites-resumen').textContent = pendientes ? `${pendientes} para resolver` : tramites.length ? 'Todo resuelto' : '';
+  $('#tramites-tabla').innerHTML = `<thead><tr><th>Código</th><th>Trámite</th><th>Cuenta</th><th>Fecha</th><th>Detalle</th><th>Estado</th></tr></thead>
+    <tbody>${tramites.length ? tramites.map((t) => `<tr data-codigo="${esc(t.codigo)}">
+      <td><b>${esc(t.codigo)}</b></td><td>${esc(NOMBRES[t.tipo] || t.tipo)}</td><td>${esc(t.email)}</td><td>${esc(fechaCorta(t.fecha))}</td>
+      <td>${esc(t.tipo === 'arrepentimiento' ? `Devolver ${pesos(t.precio || 0)} (${t.plan})${t.pago ? ` · pago ${t.pago}` : ''}` : t.tipo === 'baja' ? `${t.plan} hasta ${fechaCorta(t.hasta)}` : '')}</td>
+      <td>${t.estado === 'resuelto' ? '<span class="estado estado-publicada">Resuelto</span>' : '<button class="btn principal" data-accion="resolver">Marcar resuelto</button>'}</td>
+    </tr>`).join('') : '<tr><td colspan="6" class="nota">Todavía no hay trámites.</td></tr>'}</tbody>`;
+}
+$('#tramites-tabla').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-accion="resolver"]');
+  if (!b) return;
+  try { await enviar(`/tramites/${b.closest('tr').dataset.codigo}/resolver`, 'POST', {}); await cargarTramites(); } catch (err) { avisar(err.message); }
+});
+
 async function cargarCuentas() {
+  cargarTramites().catch(() => {});
   cuentasLista = (await api('/cuentas')).cuentas;
   if (!negocio) await cargarNegocio();
   const filtroPlan = $('#cuentas-plan');
@@ -786,12 +810,24 @@ function pintarCuentas() {
       <td>${esc(fechaCorta(c.alta))}</td>
       <td>${esc(c.pago ? `${{ mercadopago: 'Mercado Pago', prueba: 'Prueba', manual: 'Manual' }[c.pago.proveedor] || c.pago.proveedor}` : '—')}</td>
       <td class="cambiar"><select aria-label="Plan">${negocio.planes.map((pl) => `<option value="${esc(pl.id)}" ${pl.id === c.planEfectivo ? 'selected' : ''}>${esc(pl.nombre)}</option>`).join('')}</select>
-        <input type="number" min="1" max="3660" value="30" aria-label="Días"> días <button class="btn" data-accion="aplicar">Aplicar</button></td>
+        <input type="number" min="1" max="3660" value="30" aria-label="Días"> días <button class="btn" data-accion="aplicar">Aplicar</button>
+        <button class="btn" data-accion="link-clave" title="Link para que cree una contraseña nueva">Link contraseña</button></td>
     </tr>`).join('') : '<tr><td colspan="7" class="nota">No hay cuentas con ese filtro.</td></tr>'}</tbody>`;
 }
 $('#cuentas-filtro').addEventListener('input', pintarCuentas);
 $('#cuentas-plan').addEventListener('change', pintarCuentas);
 $('#cuentas-tabla').addEventListener('click', async (e) => {
+  if (e.target.closest('[data-accion="link-clave"]')) {
+    const fila = e.target.closest('tr');
+    try {
+      const { link } = await enviar(`/cuentas/${fila.dataset.id}/restablecer`, 'POST', {});
+      $('#link-clave-email').textContent = fila.querySelector('td b').textContent;
+      $('#link-clave-url').value = link;
+      $('#link-clave').hidden = false;
+      $('#link-clave').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (err) { avisar(err.message); }
+    return;
+  }
   if (!e.target.closest('[data-accion="aplicar"]')) return;
   const fila = e.target.closest('tr');
   try {
@@ -1015,7 +1051,76 @@ $('#r2-probar').addEventListener('click', async (e) => {
   b.textContent = 'Probar la conexión';
 });
 
+// ---------- Datos legales ----------
+async function cargarLegal() {
+  const l = await api('/legal');
+  const f = $('#legal-form').elements;
+  for (const n of ['titular', 'cuit', 'domicilio', 'correo', 'telefono', 'jurisdiccion']) f[n].value = l[n] || '';
+  $('#legal-estado').className = `estado ${l.completo ? 'estado-publicada' : 'estado-oculta'}`;
+  $('#legal-estado').textContent = l.completo ? 'Completos' : 'Faltan datos';
+  $('#correo-estado').innerHTML = l.correo_envio
+    ? '✓ <b>Correos activados:</b> «¿Olvidaste tu contraseña?» manda el link por correo.'
+    : '<b>Correos sin configurar:</b> si alguien se olvida la contraseña, generale el link en Suscriptores → «Link contraseña». Para que llegue solo por correo, cargá <code>RESEND_API_KEY</code> y <code>CORREO_REMITENTE</code> en Render (cuenta gratis en resend.com).';
+}
+$('#legal-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.currentTarget.elements;
+  const datos = Object.fromEntries(['titular', 'cuit', 'domicilio', 'correo', 'telefono', 'jurisdiccion'].map((n) => [n, f[n].value]));
+  try { await enviar('/legal', 'PUT', { datos }); avisar('Datos legales guardados'); await cargarLegal(); } catch (err) { avisar(err.message); }
+});
+
+// ---------- Base de datos y copias de seguridad ----------
+async function cargarBase() {
+  const b = await api('/base');
+  const NOMBRES = { peliculas: 'Películas', cuentas: 'Cuentas', campanas: 'Campañas', tramites: 'Trámites', documentos: 'Configuración' };
+  $('#base-datos').innerHTML = `<div class="resumen">${[
+    dato('Tamaño de la base', tamano(b.tamano)),
+    ...Object.entries(b.tablas).filter(([t]) => NOMBRES[t]).map(([t, n]) => dato(NOMBRES[t], n.toLocaleString('es-AR'))),
+  ].join('')}</div>`;
+  $('#restauracion-pendiente').hidden = !b.restauracionPendiente;
+  $('#respaldos').innerHTML = b.respaldos.length ? b.respaldos.map((r) => `<li class="campana respaldo" data-nombre="${esc(r.nombre)}">
+      <div class="fila-datos"><b>${esc(new Date(r.fecha).toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' }))}</b>
+        <span class="nota">${esc(r.manual ? 'Copia manual' : 'Copia automática')} · ${esc(tamano(r.tamano))}</span></div>
+      <div class="fila-acciones"><a class="btn" href="/api/admin/respaldos/${encodeURIComponent(r.nombre)}" download>Descargar</a>
+        <button class="btn peligro" data-accion="borrar-respaldo">Borrar</button></div></li>`).join('')
+    : '<li class="nota">Todavía no hay copias. La primera automática se hace unos segundos después de arrancar.</li>';
+}
+$('#respaldo-ahora').addEventListener('click', async (e) => {
+  const b = e.currentTarget;
+  b.disabled = true;
+  try { await enviar('/respaldos', 'POST', {}); avisar('Copia de seguridad hecha'); await cargarBase(); } catch (err) { avisar(err.message); }
+  b.disabled = false;
+});
+const confirmarRespaldo = new Map();
+$('#respaldos').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-accion="borrar-respaldo"]');
+  if (!b) return;
+  const nombre = b.closest('[data-nombre]').dataset.nombre;
+  if (!confirmarRespaldo.has(nombre)) {
+    b.textContent = '¿Seguro? Clic de nuevo';
+    confirmarRespaldo.set(nombre, setTimeout(() => { confirmarRespaldo.delete(nombre); b.textContent = 'Borrar'; }, 4000));
+    return;
+  }
+  clearTimeout(confirmarRespaldo.get(nombre));
+  confirmarRespaldo.delete(nombre);
+  try { await api(`/respaldos/${encodeURIComponent(nombre)}`, { method: 'DELETE' }); await cargarBase(); } catch (err) { avisar(err.message); }
+});
+$('#respaldo-subir').addEventListener('change', async (e) => {
+  const archivo = e.target.files[0];
+  e.target.value = '';
+  if (!archivo) return;
+  // Confirmación explícita: restaurar reemplaza todos los datos actuales
+  if (!window.confirm(`¿Restaurar la copia «${archivo.name}»? Al reiniciar Cinetream, todos los datos actuales se reemplazan por los de esa copia (antes se guarda una copia de lo que hay ahora).`)) return;
+  try {
+    await api('/respaldos/restaurar', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: archivo });
+    avisar('Copia lista: se aplica al reiniciar Cinetream');
+    await cargarBase();
+  } catch (err) { avisar(err.message); }
+});
+
 async function cargarAjustes() {
+  cargarLegal().catch(() => {});
+  cargarBase().catch(() => {});
   api('/r2').then(pintarR2).catch(() => {});
   api('/streamhg').then((d) => { shg.estado = d; pintarCuentaStreamHG(d); })
     .catch((err) => { pintarCuentaStreamHG({ configurado: false }); $('#shg-datos').innerHTML = `<p class="error">${esc(err.message)}</p>`; $('#shg-estado').textContent = 'Con error'; });

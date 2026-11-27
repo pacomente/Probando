@@ -244,3 +244,6 @@ body.admin { font-size: 15px; min-height: 100vh; }
 .shg-subidas li > span { display: block; color: var(--suave); overflow-wrap: anywhere; }
 @media (max-width: 760px) { .shg-video { grid-template-columns: 6rem minmax(0, 1fr); } .shg-video > :last-child { grid-column: 1 / -1; } }
 .tabla-admin .viendo { color: #3ddc97; }
+.link-clave { margin-top: 1rem; display: grid; gap: 0.6rem; padding: 1rem; border-radius: 0.7rem; background: #3ddc971a; border: 1px solid #3ddc9755; }
+.respaldo { grid-template-columns: minmax(0, 1fr) auto; }
+#legal-form .acciones { margin: 0; }

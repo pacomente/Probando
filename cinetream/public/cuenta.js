@@ -67,6 +67,11 @@ export function crearCuenta({ conServidor, alCambiar }) {
     ? 'Demostración: no se crea una cuenta real ni se cobra nada.'
     : modoPrueba ? 'Modo prueba: los pagos se simulan y no se cobra nada.' : 'Pagos seguros con Mercado Pago. Cancelás cuando quieras.');
 
+  // Links legales obligatorios (Botón de baja: Res. 316/2018; Botón de arrepentimiento: Res. 424/2020)
+  const piePagina = () => `<nav class="pie-legal" aria-label="Información legal">
+      <a href="legal.html?doc=terminos">Términos y condiciones</a><a href="legal.html?doc=privacidad">Privacidad</a>
+      <a href="tramites.html?tipo=baja">Botón de baja</a><a href="tramites.html?tipo=arrepentimiento">Botón de arrepentimiento</a></nav>`;
+
   function pintarBienvenida(vista, { modoTV }) {
     vista.innerHTML = `
       <div class="bienvenida-fondo" aria-hidden="true"></div>
@@ -81,6 +86,7 @@ export function crearCuenta({ conServidor, alCambiar }) {
           ${enApp && !conServidor ? '<button class="btn" data-nav data-ir-cuenta="servidor">Conectar con mi servidor</button>' : ''}
         </div>
         <p class="nota-prueba">${esc(notaPrueba())}</p>
+        ${conServidor ? piePagina() : ''}
       </div>`;
     vista.querySelectorAll('[data-plan]').forEach((b) => b.addEventListener('click', () => pintarAcceso(vista, 'registro', b.dataset.plan)));
     $('[data-ir-cuenta="ingresar"]', vista).addEventListener('click', () => pintarAcceso(vista, 'ingresar'));
@@ -110,11 +116,13 @@ export function crearCuenta({ conServidor, alCambiar }) {
         <input id="cuenta-clave" data-nav type="password" autocomplete="${registro ? 'new-password' : 'current-password'}" required>
         <button class="btn principal" data-nav>${registro ? (plan.precio ? 'Crear cuenta y pagar' : 'Crear cuenta gratis') : 'Ingresar'}</button>
         <p class="error-cuenta" id="cuenta-error" role="alert"></p>
+        ${!registro && conServidor ? '<button type="button" class="enlace" data-nav id="olvide">¿Olvidaste tu contraseña?</button>' : ''}
         <button type="button" class="enlace" data-nav id="cambiar-modo">${registro ? '¿Ya tenés cuenta? Ingresá' : '¿No tenés cuenta? Creá una gratis'}</button>
         <button type="button" class="enlace" data-nav id="volver-planes">← Ver los planes</button>
         <p class="nota-prueba">${esc(notaPrueba())}</p>
       </form>`;
     $('#cambiar-modo', vista).addEventListener('click', () => pintarAcceso(vista, registro ? 'ingresar' : 'registro', planId));
+    $('#olvide', vista)?.addEventListener('click', () => pintarOlvide(vista, $('#cuenta-email', vista).value));
     $('#volver-planes', vista).addEventListener('click', () => pintarBienvenida(vista, { modoTV: false }));
     $('#cambiar-plan', vista)?.addEventListener('click', () => pintarBienvenida(vista, { modoTV: false }));
     $('#acceso-espectador', vista).addEventListener('submit', async (e) => {
@@ -143,6 +151,41 @@ export function crearCuenta({ conServidor, alCambiar }) {
 
   // ---------- Ingresar en la tele con un código ----------
   let consulta = null;
+  // ---------- Olvidé mi contraseña ----------
+  function pintarOlvide(vista, email = '') {
+    vista.innerHTML = `
+      <div class="bienvenida-fondo" aria-hidden="true"></div>
+      <form class="acceso-espectador" id="olvide-form" novalidate>
+        <span class="logo"><span class="logo-marca">CINE</span><span class="logo-sub">TREAM</span></span>
+        <h1>Crear una contraseña nueva</h1>
+        <p class="acceso-ayuda">Escribí el correo de tu cuenta y te mandamos un link para crear una contraseña nueva.</p>
+        <label for="olvide-email">Correo</label>
+        <input id="olvide-email" data-nav type="email" autocomplete="email" required value="${esc(email)}">
+        <button class="btn principal" data-nav>Mandarme el link</button>
+        <p class="error-cuenta" id="olvide-error" role="alert"></p>
+        <button type="button" class="enlace" data-nav id="olvide-volver">← Volver a ingresar</button>
+      </form>`;
+    $('#olvide-volver', vista).addEventListener('click', () => pintarAcceso(vista, 'ingresar'));
+    $('#olvide-form', vista).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const correo = $('#olvide-email', vista).value.trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo)) { $('#olvide-error', vista).textContent = 'Escribí un correo válido.'; return; }
+      try {
+        const r = await api('cuenta/olvide', { email: correo });
+        $('#olvide-form', vista).innerHTML = `
+          <span class="logo"><span class="logo-marca">CINE</span><span class="logo-sub">TREAM</span></span>
+          <h1>${r.correo ? 'Revisá tu correo' : 'Pedí el link'}</h1>
+          <p class="acceso-ayuda">${r.correo
+    ? `Si <b>${esc(correo)}</b> tiene una cuenta, te llega un correo con un link para crear una contraseña nueva. Vale por 1 hora. Fijate también en «Spam».`
+    : `Escribile a ${r.contacto ? `<b>${esc(r.contacto)}</b>` : 'quien te dio acceso a Cinetream'} desde <b>${esc(correo)}</b> y te mandamos un link para crear una contraseña nueva.`}</p>
+          <button type="button" class="btn" data-nav id="olvide-listo">Volver a ingresar</button>`;
+        $('#olvide-listo', vista).addEventListener('click', () => pintarAcceso(vista, 'ingresar'));
+        enfocar($('#olvide-listo', vista), { inicial: true });
+      } catch (err) { $('#olvide-error', vista).textContent = err.message; }
+    });
+    enfocar($('#olvide-email', vista), { inicial: true });
+  }
+
   async function pintarTV(vista) {
     clearInterval(consulta);
     try {
