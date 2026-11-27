@@ -153,6 +153,8 @@ document.querySelectorAll('[data-pestana]').forEach((b) => b.addEventListener('c
   document.querySelectorAll('[data-pestana]').forEach((x) => { x.classList.toggle('activa', x === b); x.setAttribute('aria-selected', String(x === b)); });
   $('#pestana-link').hidden = b.dataset.pestana !== 'link';
   $('#pestana-archivo').hidden = b.dataset.pestana !== 'archivo';
+  $('#pestana-streamhg').hidden = b.dataset.pestana !== 'streamhg';
+  if (b.dataset.pestana === 'streamhg') cargarStreamHG();
 }));
 
 // ---------- Agregar con un link ----------
@@ -165,7 +167,17 @@ $('#link-form').addEventListener('submit', async (e) => {
   boton.disabled = true;
   boton.textContent = 'Buscando…';
   try {
-    analizado = await enviar('/analizar', 'POST', { url: $('#link-url').value });
+    mostrarAnalizado(await enviar('/analizar', 'POST', { url: $('#link-url').value }));
+  } catch (err) {
+    $('#link-error').textContent = err.message;
+  } finally {
+    boton.disabled = false;
+    boton.textContent = 'Buscar';
+  }
+});
+function mostrarAnalizado(datos) {
+  {
+    analizado = datos;
     const fuente = { archive: 'Internet Archive', directo: 'Archivo de video', pagina: 'Página web', embed: `Reproductor de ${analizado.sitio}` }[analizado.tipo];
     const conReproductor = analizado.tipo === 'embed';
     $('#link-portada').innerHTML = analizado.portada ? `<img src="${esc(analizado.portada)}" alt="Portada encontrada">` : '<span>Sin portada: se toma un cuadro del video o se usa una ilustración</span>';
@@ -179,13 +191,8 @@ $('#link-form').addEventListener('submit', async (e) => {
     $('#link-derechos').checked = false;
     $('#link-alta').hidden = false;
     $('#link-alta [name="titulo"]').focus();
-  } catch (err) {
-    $('#link-error').textContent = err.message;
-  } finally {
-    boton.disabled = false;
-    boton.textContent = 'Buscar';
   }
-});
+}
 $('#link-cancelar').addEventListener('click', () => { $('#link-alta').hidden = true; analizado = null; });
 $('#link-alta').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -205,6 +212,76 @@ $('#link-alta').addEventListener('submit', async (e) => {
     $('#link-alta-error').textContent = err.message;
   }
 });
+
+// ---------- Desde StreamHG (tu cuenta) ----------
+let shg = { pagina: 1, titulo: '', estado: null };
+const duracion = (s) => (s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min` : `${Math.max(1, Math.round(s / 60))} min`);
+async function cargarStreamHG() {
+  $('#shg-error').textContent = '';
+  try {
+    shg.estado ||= await api('/streamhg');
+    $('#shg-sin-conectar').hidden = shg.estado.configurado;
+    $('#shg-conectado').hidden = !shg.estado.configurado;
+    if (!shg.estado.configurado) return;
+    $('#shg-lista').innerHTML = '<li class="nota">Cargando tus videos…</li>';
+    const r = await api(`/streamhg/archivos?pagina=${shg.pagina}&titulo=${encodeURIComponent(shg.titulo)}`);
+    $('#shg-lista').innerHTML = r.archivos.length ? r.archivos.map((f) => `<li class="shg-video" data-codigo="${esc(f.codigo)}">
+        <div class="shg-mini">${f.miniatura ? `<img src="${esc(f.miniatura)}" alt="" loading="lazy" onerror="this.remove()">` : ''}${f.segundos ? `<span>${esc(duracion(f.segundos))}</span>` : ''}</div>
+        <div class="fila-datos"><b>${esc(f.titulo)}</b>
+          <span class="nota">${esc([f.subido?.slice(0, 10), `${f.vistas.toLocaleString('es-AR')} vistas`, f.listo ? '' : 'procesando…'].filter(Boolean).join(' · '))}</span></div>
+        ${f.enCatalogo ? '<span class="estado estado-publicada">En el catálogo</span>'
+    : `<button class="btn ${f.listo ? 'principal' : ''}" data-accion="agregar" ${f.listo ? '' : 'disabled title="StreamHG todavía lo está procesando"'}>Agregar</button>`}
+      </li>`).join('') : `<li class="vacio"><b>${shg.titulo ? 'No hay videos con ese título' : 'Todavía no tenés videos en StreamHG'}</b></li>`;
+    $('#shg-paginas').innerHTML = r.paginas > 1 ? `<button class="btn" data-pagina="${shg.pagina - 1}" ${shg.pagina <= 1 ? 'disabled' : ''}>← Anterior</button>
+      <span class="nota">Página ${shg.pagina} de ${r.paginas} · ${r.total.toLocaleString('es-AR')} videos</span>
+      <button class="btn" data-pagina="${shg.pagina + 1}" ${shg.pagina >= r.paginas ? 'disabled' : ''}>Siguiente →</button>` : '';
+    cargarSubidasStreamHG();
+  } catch (err) { $('#shg-error').textContent = err.message; $('#shg-lista').innerHTML = ''; }
+}
+$('#shg-buscar').addEventListener('submit', (e) => { e.preventDefault(); shg.titulo = $('#shg-texto').value.trim(); shg.pagina = 1; cargarStreamHG(); });
+$('#shg-paginas').addEventListener('click', (e) => { const b = e.target.closest('[data-pagina]'); if (b) { shg.pagina = Number(b.dataset.pagina); cargarStreamHG(); } });
+$('#shg-lista').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-accion="agregar"]');
+  if (!b) return;
+  b.disabled = true;
+  b.textContent = 'Preparando…';
+  try {
+    const datos = await enviar('/streamhg/preparar', 'POST', { codigo: b.closest('[data-codigo]').dataset.codigo });
+    document.querySelector('[data-pestana="link"]').click();
+    $('#link-url').value = datos.fuente || '';
+    mostrarAnalizado(datos);
+    $('#link-alta').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) { $('#shg-error').textContent = err.message; b.disabled = false; b.textContent = 'Agregar'; }
+});
+async function cargarSubidasStreamHG() {
+  try {
+    const { subidas } = await api('/streamhg/subidas');
+    $('#shg-subidas').innerHTML = subidas.map((s) => `<li><span>${esc(s.url)}</span><div class="progreso-subida"><i style="width:${s.progreso}%"></i><span>${esc(s.estado === 'PENDING' ? 'En espera' : s.estado === 'WORKING' ? 'Subiendo' : s.estado)} · ${s.progreso}%</span></div></li>`).join('');
+    clearTimeout(cargarSubidasStreamHG.t);
+    if (subidas.length && !$('#pestana-streamhg').hidden) cargarSubidasStreamHG.t = setTimeout(cargarSubidasStreamHG, 5000);
+  } catch { /* la lista de subidas es opcional */ }
+}
+$('#shg-subir').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('#shg-subir-error').textContent = '';
+  try {
+    await enviar('/streamhg/subir', 'POST', { url: $('#shg-url').value.trim() });
+    $('#shg-url').value = '';
+    avisar('StreamHG empezó a bajar el video. Cuando termine aparece en la lista.');
+    cargarSubidasStreamHG();
+  } catch (err) { $('#shg-subir-error').textContent = err.message; }
+});
+function pintarCuentaStreamHG(d) {
+  const estado = $('#shg-estado');
+  estado.className = `estado ${d.configurado ? 'estado-publicada' : 'estado-oculta'}`;
+  estado.textContent = d.configurado ? 'Conectado' : 'Sin conectar';
+  $('#shg-pasos').open = !d.configurado;
+  $('#shg-datos').innerHTML = d.configurado ? `<div class="resumen">${[
+    dato('Usuario', d.usuario || '—', d.premium ? `Premium${d.vence ? ` hasta ${d.vence.slice(0, 10)}` : ''}` : 'Cuenta gratuita'),
+    dato('Videos', (d.archivos || 0).toLocaleString('es-AR')),
+    dato('Espacio usado', tamano(d.usado || 0), d.libre ? `${tamano(d.libre)} libres` : ''),
+  ].join('')}</div>` : '';
+}
 
 // ---------- Subir un archivo ----------
 $('#archivo-campos').innerHTML = campos({ publicar: false });
@@ -393,8 +470,9 @@ const sitio = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); }
 function origenDe(p) {
   const x = catalogo.extra[p.id] || {};
   if (p.embed) {
-    if (x.enlace?.ok === false) return { clase: 'origen-caido', texto: `Reproductor caído · ${sitio(p.embed)}`, detalle: x.enlace.detalle };
-    return { clase: 'origen-embed', texto: `Reproductor de ${sitio(p.embed)} · no ocupa lugar` };
+    const nombre = p.streamhg ? 'StreamHG' : sitio(p.embed);
+    if (x.enlace?.ok === false) return { clase: 'origen-caido', texto: `Reproductor caído · ${nombre}`, detalle: x.enlace.detalle };
+    return { clase: 'origen-embed', texto: `Reproductor de ${nombre} · no ocupa lugar` };
   }
   if (!p.video) return { clase: 'origen-ninguno', texto: 'Sin video: se ve una señal de prueba' };
   if (p.video.startsWith('videos/')) return { clase: 'origen-servidor', texto: `Guardada en ${enInternet ? 'el servidor' : 'esta PC'} · ${tamano(x.bytes || 0)}` };
@@ -570,7 +648,7 @@ function abrirEditor(p) {
   $('#editor-motivo').value = editando.motivo || 'anillos';
   $('#editor-error').textContent = '';
   $('#editor-cuadro').hidden = !editando.video?.startsWith('videos/');
-  $('#editor-video').textContent = editando.embed ? `Se ve con el reproductor de ${sitio(editando.embed)}: ${editando.embed}` : editando.video ? `Video: ${editando.video.startsWith('videos/') ? (enInternet ? 'guardada en el servidor' : 'archivo en esta PC') : enR2(editando.video) ? 'en Cloudflare R2' : editando.video}` : 'Sin archivo: se reproduce una señal de prueba.';
+  $('#editor-video').textContent = editando.embed ? `Se ve con el reproductor de ${editando.streamhg ? 'StreamHG' : sitio(editando.embed)}: ${editando.embed}` : editando.video ? `Video: ${editando.video.startsWith('videos/') ? (enInternet ? 'guardada en el servidor' : 'archivo en esta PC') : enR2(editando.video) ? 'en Cloudflare R2' : editando.video}` : 'Sin archivo: se reproduce una señal de prueba.';
   pintarAficheEditor();
   $('#editor').showModal();
 }
@@ -936,6 +1014,8 @@ $('#r2-probar').addEventListener('click', async (e) => {
 
 async function cargarAjustes() {
   api('/r2').then(pintarR2).catch(() => {});
+  api('/streamhg').then((d) => { shg.estado = d; pintarCuentaStreamHG(d); })
+    .catch((err) => { pintarCuentaStreamHG({ configurado: false }); $('#shg-datos').innerHTML = `<p class="error">${esc(err.message)}</p>`; $('#shg-estado').textContent = 'Con error'; });
   const [n, c] = await Promise.all([api('/resumen'), api('/catalogo')]);
   const d = n.disco;
   const filas = [

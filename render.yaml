@@ -48,3 +48,6 @@ services:
         sync: false
       - key: R2_BUCKET
         sync: false
+      # Opcional: tu cuenta de StreamHG (API key)
+      - key: STREAMHG_CLAVE
+        sync: false

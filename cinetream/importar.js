@@ -8,6 +8,7 @@
 import { createWriteStream } from 'node:fs';
 import { rename, rm } from 'node:fs/promises';
 import { once } from 'node:events';
+import { datosParaImportar } from './streamhg.js';
 
 // Se puede cambiar para pruebas; en uso normal es Internet Archive
 const ARCHIVE = (process.env.ARCHIVE_URL || 'https://archive.org').replace(/\/$/, '');
@@ -91,6 +92,15 @@ async function analizarReproductor(r, original) {
   return datos;
 }
 
+// StreamHG: su página no se deja mostrar dentro de otra; se usa su reproductor para insertar (/e/código)
+function codigoStreamHG(u) {
+  const extra = [process.env.STREAMHG_REPRODUCTOR, ...(process.env.STREAMHG_DOMINIOS || '').split(',')]
+    .map((d) => { try { return new URL(d.includes('//') ? d : `https://${d.trim()}`).hostname; } catch { return ''; } }).filter(Boolean);
+  const h = u.hostname.replace(/^www\./, '');
+  if (!/streamhg/i.test(h) && !extra.includes(h) && !extra.includes(u.hostname)) return null;
+  return u.pathname.match(/^\/(?:(?:e|d|v|f|embed)\/)?([a-z0-9]{8,16})(?:\.html)?\/?$/i)?.[1] || null;
+}
+
 // ¿Se puede mostrar esta página dentro de Cinetream? (algunas lo prohíben)
 function permiteMostrarse(r) {
   const xfo = (r.headers.get('x-frame-options') || '').toLowerCase();
@@ -151,6 +161,8 @@ const traducirGenero = (s) => GENEROS[String(s).trim().toLowerCase()] || null;
 // ---------- Análisis del link ----------
 export async function analizar(url) {
   const u = validarLink(url);
+  const shg = codigoStreamHG(u);
+  if (shg) return datosParaImportar(shg, u.href).catch((e) => { throw new ErrorImportar(e.message); });
   const conocido = reproductorConocido(u);
   if (conocido) return analizarReproductor(conocido, u.href);
   if (SOLO_REPRODUCTOR.test(u.hostname)) throw new ErrorImportar(`No reconocimos ese link de ${sitioDe(u.href)}. Copiá el link del video (el que aparece al tocar «Compartir»).`);
