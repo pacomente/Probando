@@ -736,6 +736,7 @@ async function cargarNegocio() {
   const vistas30 = negocio.vistasPorDia.reduce((a, d) => a + d.n, 0);
   $('#negocio-datos').innerHTML = [
     dato('Suscriptores Plus', plus, `de ${negocio.cuentas} cuentas`),
+    dato('Viendo ahora', negocio.viendoAhora.pantallas, negocio.viendoAhora.pantallas ? `en ${negocio.viendoAhora.cuentas} ${negocio.viendoAhora.cuentas === 1 ? 'cuenta' : 'cuentas'}` : 'nadie en este momento'),
     dato('Reproducciones', vistas30.toLocaleString('es-AR'), 'últimos 30 días'),
     dato('Cuentas nuevas', negocio.nuevas30, 'últimos 30 días'),
     dato('Ingreso mensual estimado', pesos(negocio.ingresoMensual), negocio.modoPrueba ? 'con pagos de prueba' : 'planes vigentes'),
@@ -780,7 +781,7 @@ function pintarCuentas() {
     <tbody>${lista.length ? lista.map((c) => `<tr data-id="${esc(c.id)}">
       <td><b>${esc(c.email)}</b>${c.nombre ? `<small>${esc(c.nombre)}</small>` : ''}</td>
       <td><span class="estado ${c.planEfectivo === 'gratis' ? 'estado-oculta' : 'estado-publicada'}">${esc(nombrePlan(c.planEfectivo))}</span></td>
-      <td>${esc(c.planEfectivo === 'gratis' ? '—' : ESTADOS[c.estado] || c.estado)}</td>
+      <td>${esc(c.planEfectivo === 'gratis' ? '—' : ESTADOS[c.estado] || c.estado)}${c.viendo ? `<small class="viendo">● Viendo en ${c.viendo} ${c.viendo === 1 ? 'pantalla' : 'pantallas'}</small>` : ''}</td>
       <td>${esc(c.planEfectivo === 'gratis' ? '—' : fechaCorta(c.vence))}</td>
       <td>${esc(fechaCorta(c.alta))}</td>
       <td>${esc(c.pago ? `${{ mercadopago: 'Mercado Pago', prueba: 'Prueba', manual: 'Manual' }[c.pago.proveedor] || c.pago.proveedor}` : '—')}</td>
@@ -927,6 +928,7 @@ async function cargarPlanes() {
       <legend>${esc(pl.id === 'gratis' ? 'Gratis (con publicidad)' : pl.id === 'plus' ? 'Plus mensual' : 'Plus anual')}</legend>
       <label>Nombre<input name="nombre" maxlength="40" value="${esc(pl.nombre)}"></label>
       <label>Precio ($ por ${esc(pl.periodo)})<input name="precio" type="number" min="0" step="1" value="${esc(pl.precio)}" ${pl.id === 'gratis' ? 'disabled' : ''}></label>
+      <label>Pantallas a la vez<input name="pantallas" type="number" min="1" max="10" step="1" value="${esc(pl.pantallas || 1)}"></label>
       <label class="ancho">Descripción<input name="descripcion" maxlength="200" value="${esc(pl.descripcion)}"></label>
       ${pl.id === 'gratis' ? '' : `<label class="tilde"><input type="checkbox" name="oculto" ${pl.oculto ? 'checked' : ''}> No ofrecer este plan por ahora</label>`}
     </fieldset>`).join('') + '<div class="acciones"><button class="btn principal">Guardar planes</button></div>';
@@ -941,6 +943,7 @@ $('#planes-form').addEventListener('submit', async (e) => {
     nombre: f.querySelector('[name="nombre"]').value,
     precio: f.querySelector('[name="precio"]').value,
     descripcion: f.querySelector('[name="descripcion"]').value,
+    pantallas: f.querySelector('[name="pantallas"]').value,
     oculto: f.querySelector('[name="oculto"]')?.checked || false,
   }));
   try { await enviar('/planes', 'PUT', { planes }); avisar('Planes guardados'); await cargarPlanes(); } catch (err) { avisar(err.message); }

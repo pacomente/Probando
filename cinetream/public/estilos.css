@@ -787,3 +787,16 @@ body.pagina-simple { min-height: 100vh; display: grid; place-items: center; padd
 .rep-cargando-externo span { width: 3rem; height: 3rem; border-radius: 50%; border: 0.25rem solid #ffffff33; border-top-color: var(--acento); animation: girar 0.9s linear infinite; }
 .rep-externo-zona { position: absolute; top: 0; left: 0; right: 0; height: 4.5rem; }
 .rep-externo.con-barra .rep-externo-zona { pointer-events: none; }
+
+/* ---------- Límite de pantallas ---------- */
+.limite-pantallas { position: absolute; inset: 0; display: grid; place-items: safe center; padding: 1.5rem max(16px, var(--margen)); background: radial-gradient(60% 50% at 50% 0%, #ffb54722, transparent 70%), #08090dee; overflow-y: auto; }
+.limite-caja { width: min(36rem, 100%); display: grid; gap: 1rem; text-align: center; }
+.limite-icono { font-size: 2.6rem; }
+.limite-caja h2 { margin: 0; font: 900 clamp(1.6rem, 4vw, 2.4rem)/1 var(--titulo); text-transform: uppercase; }
+.limite-caja p { margin: 0; color: var(--suave); }
+.limite-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; text-align: left; }
+.limite-lista li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.8rem 1rem; border-radius: 0.8rem; background: var(--superficie); border: 1px solid var(--linea); }
+.limite-lista li span { display: grid; gap: 0.15rem; min-width: 0; }
+.limite-lista small { color: var(--suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.limite-caja .acciones { justify-content: center; }
+@media (max-width: 560px) { .limite-lista li { flex-direction: column; align-items: stretch; } }

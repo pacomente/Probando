@@ -7,6 +7,7 @@ import { abrirReproductor, abrirReproductorExterno } from './reproductor.js';
 import { crearCuenta } from './cuenta.js';
 import { crearPublicidad } from './anuncios.js';
 import { enApp, esTeleApp, pintarConexion } from './app-nativa.js';
+import { crearPantallas } from './pantallas.js';
 
 const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -34,6 +35,8 @@ const cuentas = crearCuenta({
 await cuentas.cargar().catch(() => null);
 const mensajePago = await cuentas.verificarRetorno().catch(() => null);
 const cuenta = () => cuentas.actual;
+// Límite de pantallas a la vez (solo con cuenta real en el servidor)
+const pantallas = crearPantallas({ activo: () => conServidor && Boolean(cuenta()) && !cuenta()?.demo, modoTV: () => modoTV() });
 const publicidad = crearPublicidad({ conServidor });
 await publicidad.cargar(Boolean(cuenta()?.anuncios));
 // Un título Plus se ve solo con un plan Plus
@@ -556,7 +559,8 @@ function pintarAjustes() {
   if (c) {
     const fecha = c.vence ? new Date(c.vence).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
     $('#cuenta-resumen').innerHTML = `<b>${esc(c.planNombre)}</b>${c.plus ? '<span class="sello-plus en-linea">Plus</span>' : ''}<small>${esc(c.email)}${c.demo ? ' · demostración' : ''}</small>
-      <small>${c.vence ? (c.estado === 'cancelada' ? `No se renueva. Tenés ${esc(c.planNombre)} hasta el ${fecha}.` : `Se renueva el ${fecha}.`) : 'Con publicidad. Pasate a Plus para ver sin cortes.'}</small>`;
+      <small>${c.vence ? (c.estado === 'cancelada' ? `No se renueva. Tenés ${esc(c.planNombre)} hasta el ${fecha}.` : `Se renueva el ${fecha}.`) : 'Con publicidad. Pasate a Plus para ver sin cortes.'}</small>
+      ${c.pantallas ? `<small>Podés ver en ${c.pantallas} ${c.pantallas === 1 ? 'pantalla' : 'pantallas'} a la vez.</small>` : ''}`;
     $('#cuenta-cancelar').hidden = !(c.plus && c.estado === 'activa');
     $('#cuenta-cancelar').textContent = 'Cancelar la renovación';
     $('#cuenta-planes').textContent = c.plus ? 'Cambiar de plan' : '★ Pasate a Plus';
@@ -627,6 +631,23 @@ async function reproducir(id, desde) {
   document.body.style.overflow = 'hidden';
   try { history.pushState({ cinetream: 'reproductor' }, ''); } catch { /* sin historial */ }
 
+  // Límite de pantallas: si la cuenta ya está mirando en todas las que permite su plan, se ofrece cortar en otro equipo
+  {
+    let porAtras = false;
+    const atras = () => { porAtras = true; pantallas.cancelarPermiso(); };
+    window.addEventListener('popstate', atras);
+    const permiso = await pantallas.pedirPermiso(contenedor, p);
+    window.removeEventListener('popstate', atras);
+    if (permiso !== 'ok') {
+      contenedor.hidden = true;
+      document.body.style.overflow = '';
+      if (!porAtras) { ignorarAtras++; try { history.back(); } catch { ignorarAtras--; } }
+      if (permiso === 'planes') setTimeout(() => mostrar('planes'), 150);
+      else if (anterior?.isConnected) enfocar(anterior, { inicial: true });
+      return;
+    }
+  }
+
   // Plan Gratis: un anuncio antes de la película (como mucho uno cada 15 minutos)
   if (conPublicidad() && Date.now() - ultimoPrevio > 15 * 60000) {
     let porAtras = false;
@@ -646,6 +667,7 @@ async function reproducir(id, desde) {
   let siguientePedida = null;
   // Cuenta la reproducción para las estadísticas del administrador
   if (conServidor) fetch('/api/vista', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id }), keepalive: true }).catch(() => {});
+  let dejarDeVigilar = () => {};
   const abrir = p.embed ? abrirReproductorExterno : abrirReproductor;
   const rep = abrir(contenedor, p, {
     desde: inicio,
@@ -658,6 +680,7 @@ async function reproducir(id, desde) {
       guardarDatos();
     },
     alSalir() {
+      dejarDeVigilar();
       contenedor.hidden = true;
       document.body.style.overflow = '';
       window.removeEventListener('popstate', alAtras);
@@ -668,6 +691,11 @@ async function reproducir(id, desde) {
       // "A continuación": se abre la siguiente apenas se cerró esta
       setTimeout(() => { if (siguientePedida) reproducir(siguientePedida.id, 0); }, 0);
     },
+  });
+  // Si otro equipo de la cuenta corta esta pantalla, se cierra la película
+  dejarDeVigilar = pantallas.vigilar((motivo) => {
+    avisar(motivo === 'cortada' ? 'Se empezó a ver en otro equipo con tu cuenta' : 'Se llegó al límite de pantallas de tu plan');
+    rep.salir();
   });
   // El "atrás" del celular cierra el reproductor
   let cerradoConAtras = false;

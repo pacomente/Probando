@@ -10,9 +10,9 @@ const porPeriodo = (p) => (p.precio ? ` por ${p.periodo}` : ' para siempre');
 
 // Planes de la demostración (en la versión instalada los define el administrador)
 const PLANES_DEMO = [
-  { id: 'gratis', nombre: 'Gratis', precio: 0, periodo: 'mes', anuncios: true, plus: false, descripcion: 'Todo el catálogo libre, con publicidad.' },
-  { id: 'plus', nombre: 'Plus', precio: 2999, periodo: 'mes', anuncios: false, plus: true, descripcion: 'Sin publicidad y con los títulos Plus.' },
-  { id: 'plus-anual', nombre: 'Plus anual', precio: 29990, periodo: 'año', anuncios: false, plus: true, descripcion: 'Lo mismo que Plus, pagando una vez al año: dos meses de regalo.' },
+  { id: 'gratis', nombre: 'Gratis', precio: 0, periodo: 'mes', anuncios: true, plus: false, pantallas: 1, descripcion: 'Todo el catálogo libre, con publicidad.' },
+  { id: 'plus', nombre: 'Plus', precio: 2999, periodo: 'mes', anuncios: false, plus: true, pantallas: 2, descripcion: 'Sin publicidad y con los títulos Plus.' },
+  { id: 'plus-anual', nombre: 'Plus anual', precio: 29990, periodo: 'año', anuncios: false, plus: true, pantallas: 2, descripcion: 'Lo mismo que Plus, pagando una vez al año: dos meses de regalo.' },
 ];
 
 function leerLocal(clave) { try { return JSON.parse(localStorage.getItem(clave)); } catch { return null; } }
@@ -57,6 +57,7 @@ export function crearCuenta({ conServidor, alCambiar }) {
           <li>${p.anuncios ? 'Con publicidad' : '✓ Sin publicidad'}</li>
           <li>${p.plus ? '✓ Títulos Plus' : 'Catálogo libre'}</li>
           <li>✓ En la tele, la compu y el celular</li>
+          <li>${(p.pantallas || 1) > 1 ? `✓ ${p.pantallas} pantallas a la vez` : '1 pantalla a la vez'}</li>
         </ul>
         <span class="plan-boton">${actual === p.id ? 'Tu plan actual' : esc(accion(p))}</span>
       </button>`).join('');
