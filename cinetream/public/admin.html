@@ -80,6 +80,7 @@
       <div class="pestanas-admin" role="tablist">
         <button role="tab" class="activa" data-pestana="link" aria-selected="true">Agregar con un link</button>
         <button role="tab" data-pestana="archivo" aria-selected="false">Subir un archivo</button>
+        <button role="tab" data-pestana="streamhg" aria-selected="false">Desde StreamHG</button>
       </div>
 
       <div class="pestana-cuerpo" id="pestana-link">
@@ -108,6 +109,33 @@
           </div>
           <p class="error" id="link-alta-error" role="alert"></p>
         </form>
+      </div>
+
+      <div class="pestana-cuerpo" id="pestana-streamhg" hidden>
+        <div id="shg-sin-conectar" hidden>
+          <p class="nota">Conectá tu cuenta de StreamHG para ver acá tus videos y agregarlos al catálogo con un clic.
+            Se configura una sola vez en <b>Ajustes → StreamHG</b>.</p>
+        </div>
+        <div id="shg-conectado" hidden>
+          <p class="nota">Tus videos de StreamHG. Al agregarlos se ven dentro de Cinetream con el reproductor de StreamHG: no ocupan lugar en tu servidor.</p>
+          <form class="buscar-link" id="shg-buscar">
+            <input type="search" id="shg-texto" placeholder="Buscar en tus videos de StreamHG" aria-label="Buscar en StreamHG">
+            <button class="btn">Buscar</button>
+          </form>
+          <ul class="shg-lista" id="shg-lista"></ul>
+          <div class="shg-paginas" id="shg-paginas"></div>
+          <details class="shg-subir">
+            <summary>Subir un video a StreamHG desde un link</summary>
+            <p class="nota">StreamHG baja el video directo a tu cuenta (no pasa por Cinetream). Cuando termine de procesarlo aparece en la lista de arriba.</p>
+            <form class="buscar-link" id="shg-subir">
+              <input type="url" id="shg-url" placeholder="https://… (link directo al archivo de video)" aria-label="Link del video para subir a StreamHG" required>
+              <button class="btn principal">Subir a StreamHG</button>
+            </form>
+            <p class="error" id="shg-subir-error" role="alert"></p>
+            <ul class="shg-subidas" id="shg-subidas"></ul>
+          </details>
+        </div>
+        <p class="error" id="shg-error" role="alert"></p>
       </div>
 
       <div class="pestana-cuerpo" id="pestana-archivo" hidden>
@@ -221,6 +249,22 @@
             <li>En R2, abrí <b>Manage API tokens → Create API token</b>. Permiso: <b>Admin Read &amp; Write</b> (hace falta para que Cinetream configure las subidas). Copiá el <b>Access Key ID</b>, el <b>Secret Access Key</b> y tu <b>Account ID</b>.</li>
             <li>En Render, en tu servicio → <b>Environment</b>, agregá: <code>R2_CUENTA</code> (Account ID), <code>R2_CLAVE_ID</code>, <code>R2_CLAVE_SECRETA</code> y <code>R2_BUCKET</code> (<code>cinetream</code>). Guardá: Render reinicia solo.</li>
             <li>Volvé acá y tocá <b>Probar la conexión</b>.</li>
+          </ol>
+        </details>
+      </section>
+      <section class="tarjeta-panel">
+        <div class="panel-titulo"><h2>StreamHG</h2><span class="estado" id="shg-estado"></span></div>
+        <p class="nota">Con tu cuenta de StreamHG conectada, en Catálogo aparece la pestaña «Desde StreamHG» con todos tus videos para
+          agregarlos con un clic, con título, duración y miniatura. Las películas se ven con el reproductor de StreamHG dentro de
+          Cinetream. «Revisar links» avisa si StreamHG borró alguno.</p>
+        <div id="shg-datos"></div>
+        <details class="pasos-r2" id="shg-pasos">
+          <summary>Cómo conectar StreamHG</summary>
+          <ol class="pasos-pago">
+            <li>Entrá a tu cuenta de <b>StreamHG</b> y buscá tu <b>API key</b> (en la sección de la cuenta o de la API).</li>
+            <li>En Render, en tu servicio → <b>Environment</b>, agregá <code>STREAMHG_CLAVE</code> con esa API key. Guardá: Render reinicia solo.</li>
+            <li>Volvé acá: tiene que decir «Conectado» con tu usuario.</li>
+            <li>Opcional: si tus videos se ven con otra dirección de reproductor, agregá <code>STREAMHG_REPRODUCTOR</code> con esa dirección (por ejemplo <code>https://reproductor.com</code>).</li>
           </ol>
         </details>
       </section>

@@ -17,6 +17,10 @@ import { direccionPublica, enInternet, esLocal, ipCliente } from './red.js';
 import {
   borrarObjeto, espacioUsado, ErrorR2, linkSubida, permitirSubidasDesde, probarConexion, r2Bucket, r2Configurado, subirFlujo,
 } from './r2.js';
+import {
+  archivos as archivosStreamHG, cuenta as cuentaStreamHG, datosParaImportar, ErrorStreamHG, revisarStreamHG,
+  streamhgConfigurado, subidasPendientes, subirPorLink,
+} from './streamhg.js';
 import { estadoEnlace, guardarEnlace, olvidarPelicula, revisarEnlace, vistas, vistasPorDia } from './estadisticas.js';
 
 const HORAS_SESION = 12;
@@ -263,6 +267,36 @@ export async function rutasAdmin(req, res, url) {
       });
     }
 
+    // ---------- StreamHG (tu cuenta) ----------
+    if (ruta.startsWith('/streamhg')) {
+      try {
+        if (ruta === '/streamhg') {
+          if (!streamhgConfigurado()) return json(res, 200, { configurado: false });
+          return json(res, 200, { configurado: true, ...(await cuentaStreamHG()) });
+        }
+        if (!streamhgConfigurado()) return json(res, 400, { error: 'Conectá tu cuenta de StreamHG en Ajustes (variable STREAMHG_CLAVE).' });
+        if (ruta === '/streamhg/archivos') {
+          const r = await archivosStreamHG({ pagina: Number(url.searchParams.get('pagina')) || 1, titulo: url.searchParams.get('titulo') || '' });
+          // Se marca cuáles ya están en el catálogo
+          const enCatalogo = new Set(todas().map((p) => p.streamhg).filter(Boolean));
+          return json(res, 200, { ...r, archivos: r.archivos.map((f) => ({ ...f, enCatalogo: enCatalogo.has(f.codigo) })) });
+        }
+        if (ruta === '/streamhg/preparar' && req.method === 'POST') {
+          const { codigo } = await leerJSON(req);
+          return json(res, 200, await datosParaImportar(String(codigo || '')));
+        }
+        if (ruta === '/streamhg/subir' && req.method === 'POST') {
+          const { url: link } = await leerJSON(req);
+          if (!/^https?:\/\//i.test(String(link || ''))) return json(res, 400, { error: 'Pegá un link que empiece con http:// o https://' });
+          return json(res, 200, await subirPorLink(String(link)));
+        }
+        if (ruta === '/streamhg/subidas') return json(res, 200, { subidas: await subidasPendientes() });
+      } catch (e) {
+        if (e instanceof ErrorStreamHG) return json(res, 502, { error: e.message });
+        throw e;
+      }
+    }
+
     // ---------- Cloudflare R2 ----------
     if (ruta === '/r2') return json(res, 200, await datosR2());
     if (ruta === '/r2/probar' && req.method === 'POST') {
@@ -289,7 +323,8 @@ export async function rutasAdmin(req, res, url) {
       const resultados = {};
       for (let i = 0; i < conLink.length; i += 4) {
         await Promise.all(conLink.slice(i, i + 4).map(async (p) => {
-          const r = p.embed ? await revisarReproductor(p.embed) : await revisarEnlace(p.video);
+          const r = p.streamhg && streamhgConfigurado() ? await revisarStreamHG(p.streamhg)
+            : p.embed ? await revisarReproductor(p.embed) : await revisarEnlace(p.video);
           guardarEnlace(p.id, r);
           resultados[p.id] = r;
         }));
@@ -344,7 +379,7 @@ export async function rutasAdmin(req, res, url) {
       if (!info?.video && !info?.embed) return json(res, 400, { error: 'Primero buscá el link.' });
       if (info.embed) {
         // Con el reproductor del otro sitio no se descarga nada: solo la portada
-        const p = agregarPelicula({ ...datos, video: null, embed: info.embed, fuente: info.fuente || info.embed, estado: 'descargando' });
+        const p = agregarPelicula({ ...datos, video: null, embed: info.embed, streamhg: info.streamhg, fuente: info.fuente || info.embed, estado: 'descargando' });
         importar(p, { ...info, video: null, publicar: Boolean(datos?.publicar) }, 'link');
         return json(res, 200, { pelicula: p });
       }

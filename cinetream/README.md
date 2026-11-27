@@ -77,6 +77,22 @@ Así **no se pagan almacenamiento ni tráfico**: el video lo sirve el otro sitio
 de derechos sigue siendo obligatoria. En la tele, «Volver» o el botón atrás cierran el reproductor; con la flecha abajo
 el control pasa al reproductor del sitio (pausa, adelantar).
 
+### Tu cuenta de StreamHG
+
+Si subís tus videos a StreamHG, Cinetream se conecta con tu cuenta por su API:
+
+- **Catálogo → Desde StreamHG:** lista todos tus videos (con miniatura, duración y vistas), con buscador. **Agregar** abre la
+  ficha ya completa (título, duración, portada) para revisarla y publicarla.
+- **Subir un video a StreamHG desde un link:** StreamHG lo baja directo a tu cuenta y se ve el avance.
+- **Links de StreamHG** pegados en «Agregar con un link» (de la página del video o del reproductor `/e/…`) también funcionan.
+- Las películas se ven con el **reproductor para insertar** de StreamHG (`/e/código`), que es el que se deja mostrar dentro de
+  otro sitio. (La página común de StreamHG lo prohíbe: por eso un link común no se reproducía.)
+- «Revisar links» le pregunta a StreamHG si cada video sigue disponible.
+
+**Conectarla:** en StreamHG copiá tu **API key**; en Render → **Environment** agregá `STREAMHG_CLAVE` con esa clave
+(y, si tus videos usan otra dirección de reproductor, `STREAMHG_REPRODUCTOR`). En el administrador, **Ajustes → StreamHG**
+tiene que decir «Conectado». La clave queda solo en el servidor: nunca llega al navegador.
+
 ### ¿Dónde queda guardada cada película?
 
 | Cómo se agregó | Qué se guarda en el servidor | Qué pasa si el sitio original la borra |
@@ -308,6 +324,7 @@ Esto es la plataforma (la parte que ve el público). Para venderla como servicio
 | `importar.js` | Análisis de links (Internet Archive, archivo directo, página con video) y descargas. |
 | `datos.js` | Catálogo y contraseña guardados en `datos/`. |
 | `estadisticas.js` | Reproducciones por película y estado de los links. |
+| `streamhg.js` | Tu cuenta de StreamHG: lista de videos, datos, subida por link y reproductor para insertar. |
 | `r2.js` | Videos en Cloudflare R2: firma de pedidos (compatible con S3), subidas por partes y links firmados. |
 | `red.js` | IP del visitante y pedidos locales, también detrás del proxy de Render. |
 | `../render.yaml` | Configuración para publicar en Render. |

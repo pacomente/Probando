@@ -79,6 +79,7 @@ function limpiar(d) {
     video: d.video ? texto(d.video, 2000) : null,
     // Reproductor de otro sitio (YouTube, Vimeo…): la película se ve con él, sin descargar nada
     embed: /^https?:\/\//i.test(d.embed || '') ? texto(d.embed, 2000) : null,
+    streamhg: /^[a-z0-9]{8,16}$/i.test(d.streamhg || '') ? d.streamhg : null, // código del video en tu cuenta de StreamHG
     portada: d.portada ? texto(d.portada, 2000) : null,
     colores: [color(d.colores?.[0], '#1c2030'), color(d.colores?.[1], '#ffb547')],
     motivo: MOTIVOS.includes(d.motivo) ? d.motivo : 'anillos',

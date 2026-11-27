@@ -230,3 +230,16 @@ body.admin { font-size: 15px; min-height: 100vh; }
 .pasos-r2[open] summary { margin-bottom: 0.8rem; }
 #r2-datos .resumen { margin: 0.4rem 0 0.8rem; }
 .origen-embed::before { background: #c084fc; }
+
+/* ---------- Desde StreamHG ---------- */
+.shg-lista { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: 0.6rem; }
+.shg-video { display: grid; grid-template-columns: 9rem minmax(0, 1fr) auto; gap: 1rem; align-items: center; padding: 0.5rem; border-radius: 0.7rem; background: var(--fondo); border: 1px solid var(--linea); }
+.shg-mini { position: relative; aspect-ratio: 16 / 9; border-radius: 0.4rem; overflow: hidden; background: #000; }
+.shg-mini img { width: 100%; height: 100%; object-fit: cover; }
+.shg-mini span { position: absolute; right: 0.3rem; bottom: 0.3rem; font-size: 0.7rem; font-weight: 700; padding: 0.1rem 0.35rem; border-radius: 0.25rem; background: #000c; }
+.shg-paginas { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 0.8rem; }
+.shg-subir { margin-top: 1.2rem; }
+.shg-subir summary { cursor: pointer; font-weight: 600; }
+.shg-subidas { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.5rem; font-size: 0.85rem; }
+.shg-subidas li > span { display: block; color: var(--suave); overflow-wrap: anywhere; }
+@media (max-width: 760px) { .shg-video { grid-template-columns: 6rem minmax(0, 1fr); } .shg-video > :last-child { grid-column: 1 / -1; } }
